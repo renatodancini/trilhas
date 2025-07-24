@@ -1,0 +1,308 @@
+import streamlit as st
+import os
+import pandas as pd
+import sqlite3
+
+# Inicialização do session_state antes de qualquer uso
+def inicializa_session_state():
+    if 'autenticado' not in st.session_state:
+        st.session_state['autenticado'] = False
+    if 'usuario' not in st.session_state:
+        st.session_state['usuario'] = ''
+    if 'show_login' not in st.session_state:
+        st.session_state['show_login'] = False
+inicializa_session_state()
+
+# Diagnóstico: Exibe o session_state no topo da tela para depuração
+# Remover painel de debug
+# st.write("DEBUG session_state:", dict(st.session_state))
+
+# IMPORTAÇÕES DAS TELAS E UTILITÁRIOS
+from tela_impressao import tela_impressao
+from tela_registre_se import tela_registre_se
+from tela_perfil import tela_perfil
+from tela_configuracao import tela_configuracao
+from utils import (
+    USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
+    inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
+    salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por
+)
+
+# Ao iniciar, tenta restaurar login
+if not st.session_state['autenticado']:
+    login_info = busca_login_status()
+    if login_info:
+        st.session_state['autenticado'] = True
+        st.session_state['usuario'] = login_info['nome']
+        st.session_state['tipo'] = login_info['tipo']
+
+# Função para aplicar estilo customizado ao menu lateral
+def estilo_menu_lateral():
+    st.markdown('''
+        <style>
+            section[data-testid="stSidebar"] {
+                background-color: #003366;
+                border-right: 1px solid #003366;
+            }
+            section[data-testid="stSidebar"] * {
+                color: #FFFFFF !important;
+            }
+            div[data-baseweb="radio"] label {
+                font-size: 1.1em;
+                font-weight: bold;
+            }
+            section[data-testid="stSidebar"] > div:first-child {
+                margin-top: 30px;
+            }
+            .sidebar-footer {
+                position: absolute;
+                bottom: 30px;
+                left: 0;
+                width: 100%;
+                text-align: center;
+            }
+        </style>
+    ''', unsafe_allow_html=True)
+
+# Configuração da página
+st.set_page_config(page_title="Impressão de Trilhas - Home", layout="wide")
+
+# Aplica o estilo customizado ao menu lateral
+estilo_menu_lateral()
+
+# Reduzir margens laterais para 10px
+st.markdown('''
+    <style>
+    .main .block-container {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+    </style>
+''', unsafe_allow_html=True)
+
+# Remover header azul, manter só o botão Login/Logoff no topo
+header_col, header_btn_col = st.columns([10, 1])
+with header_col:
+    st.markdown("""
+        <style>
+            .main .block-container {
+                padding-top: 20px !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+with header_btn_col:
+    if not st.session_state['autenticado']:
+        if st.button("Login", key="header_login_btn", help="Clique para logar", use_container_width=True):
+            st.session_state['show_login'] = True
+    else:
+        if st.button("Logout", key="header_logoff_btn", help="Clique para sair", use_container_width=True):
+            st.session_state['autenticado'] = False
+            st.session_state['usuario'] = ''
+            remove_login_status()  # Remove do banco
+            st.success('Logout realizado com sucesso!')
+            try:
+                st.rerun()
+            except AttributeError:
+                st.experimental_rerun()
+
+# Sessão de autenticação
+# if 'autenticado' not in st.session_state:
+#     st.session_state['autenticado'] = False
+# if 'usuario' not in st.session_state:
+#     st.session_state['usuario'] = ''
+# if 'show_login' not in st.session_state:
+#     st.session_state['show_login'] = False
+
+# Menu lateral
+with st.sidebar:
+    opcoes_menu = ["Home"]
+    # Só mostra Impressão de Trilhas e Configuração para usuários logados
+    if st.session_state['autenticado']:
+        opcoes_menu.append("Impressão de Trilhas")
+        opcoes_menu.append("Perfil")
+        # Descobre tipo do usuário logado
+        try:
+            df_usuarios = pd.read_csv(USERS_FILE)
+            tipo_usuario = df_usuarios[df_usuarios['nome'] == st.session_state['usuario']]['tipo'].values
+            if len(tipo_usuario) > 0 and tipo_usuario[0] == 'Administrador':
+                opcoes_menu.append("Configuração")
+        except Exception:
+            pass
+    else:
+        opcoes_menu.append("Registre-se")
+    pagina = st.radio("", opcoes_menu)
+    st.markdown('<div class="sidebar-footer"></div>', unsafe_allow_html=True)
+    if st.session_state['autenticado']:
+        st.markdown(f'<span style="color:#fff;">Usuário: {st.session_state["usuario"]}</span>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Tela de login
+if st.session_state.get('show_login', False) and not st.session_state['autenticado']:
+    col_login1, col_login2, col_login3 = st.columns([2.75,2.5,2.75])
+    with col_login2:
+        st.markdown('<h2 style="text-align:center; margin-bottom: 20px;">Login</h2>', unsafe_allow_html=True)
+        usuario = st.text_input("Usuário", key="login_usuario")
+        senha = st.text_input("Senha", type="password", key="login_senha")
+        if st.button("Entrar", key="btn_main_entrar"):
+            ok, nome, tipo = autentica_usuario(usuario, senha)
+            if ok:
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = nome
+                st.session_state['tipo'] = tipo
+                salva_login_status(usuario, nome, tipo) # Salva status no banco
+                st.session_state['show_login'] = False
+                st.success(f"Bem-vindo, {nome}!")
+                try:
+                    st.rerun()
+                except AttributeError:
+                    st.experimental_rerun()
+            else:
+                st.error("Usuário ou senha inválidos.")
+    st.stop()
+
+# Conteúdo principal de acordo com o menu
+# IMPORTAÇÕES DAS TELAS
+# SUBSTITUIR OS BLOCOS DAS TELAS POR CHAMADAS
+# Impressão de Trilhas
+if st.session_state.get('show_impressao', False):
+    # Oculta menu lateral e conteúdo principal, mostra só a tela de impressão
+    hide_sidebar = '''
+        <style>
+        [data-testid="stSidebar"], .block-container > :not(:first-child) { display: none !important; }
+        </style>
+    '''
+    st.markdown(hide_sidebar, unsafe_allow_html=True)
+    trilha = st.session_state.get('trilha_impressao', '')
+    codigo = st.session_state.get('codigo_impressao', '')
+    st.markdown(f"## {codigo} - {trilha}")
+    df_trilhas_banco = busca_gestao_trilhas()
+    if df_trilhas_banco is not None and 'Responsável' in df_trilhas_banco.columns:
+        df_trilhas_banco = df_trilhas_banco.rename(columns={'Responsável': 'Impresso por'})
+    df_atividades = df_trilhas_banco[df_trilhas_banco['Trilhas'] == trilha] if df_trilhas_banco is not None else None
+    if df_atividades is not None and not df_atividades.empty:
+        st.dataframe(df_atividades)
+    # Disponibiliza o XLSX para download
+    if 'xlsx_bytes' in st.session_state:
+        import datetime
+        # Só permite download para administradores
+        tipo_usuario = st.session_state.get('tipo', '')
+        if tipo_usuario == 'Administrador':
+            if st.download_button(
+                label="Baixar XLSX para impressão",
+                data=st.session_state['xlsx_bytes'],
+                file_name=f"{codigo}_{trilha}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ):
+                # Atualiza status, impresso por, data e hora da trilha
+                agora = datetime.datetime.now()
+                data_str = agora.strftime('%d/%m/%Y')
+                hora_str = agora.strftime('%H:%M:%S')
+                data_hora_download = agora.strftime('%d/%m/%Y %H:%M:%S')
+                atualiza_status_trilha(trilha, 'Impresso', st.session_state.get('usuario',''), data_str, hora_str, data_hora_download)
+                try:
+                    st.rerun()
+                except AttributeError:
+                    st.experimental_rerun()
+        else:
+            st.info('Somente administradores podem baixar o arquivo de impressão.')
+    if st.button("Fechar impressão", key="btn_fechar_impressao"):
+        st.session_state['show_impressao'] = False
+        st.session_state['trilha_impressao'] = ''
+        st.session_state['codigo_impressao'] = ''
+        # Força rerun imediato para fechar a tela
+        try:
+            st.rerun()
+        except AttributeError:
+            st.experimental_rerun()
+else:
+    if pagina == "Home" and not st.session_state.get('show_login', False):
+        st.write('### Gestão das Trilhas')
+        df_trilhas_banco = busca_gestao_trilhas()
+        trilha_selecionada = None
+        if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
+            trilhas_unicas = df_trilhas_banco[['Código', 'Trilhas']].drop_duplicates().dropna(subset=['Trilhas'])
+            opcoes_combo = [f"{row['Código']} - {row['Trilhas']}" for _, row in trilhas_unicas.iterrows()]
+            trilha_combo = st.selectbox('Selecione uma trilha para imprimir:', opcoes_combo, key='combo_trilha_home')
+            if trilha_combo:
+                # Extrai código e nome
+                codigo_selecionado, nome_selecionado = trilha_combo.split(' - ', 1)
+            else:
+                codigo_selecionado, nome_selecionado = '', ''
+            if st.button('Imprimir', key='btn_imprimir_home') and trilha_combo:
+                st.session_state['trilha_impressao'] = nome_selecionado
+                st.session_state['codigo_impressao'] = codigo_selecionado
+                st.session_state['show_impressao'] = True
+                st.session_state['pagina'] = 'Impressão de Trilhas'
+                st.rerun()
+        if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
+            # Troca o nome da coluna se necessário
+            if 'Responsável' in df_trilhas_banco.columns:
+                df_trilhas_banco = df_trilhas_banco.rename(columns={'Responsável': 'Impresso por'})
+            if 'Status da Trilha' in df_trilhas_banco.columns:
+                df_trilhas_banco = df_trilhas_banco.rename(columns={'Status da Trilha': 'Status'})
+            # Preenche status automático apenas se a coluna não existir
+            if 'Status' not in df_trilhas_banco.columns:
+                df_trilhas_banco['Status'] = 'N/ Impresso'
+            # Não sobrescrever o status se já existir (mantém 'Impresso' após download)
+            if 'Impresso por' not in df_trilhas_banco.columns:
+                df_trilhas_banco['Impresso por'] = ''
+            # Seleciona apenas a primeira ocorrência de cada trilha
+            df_home = df_trilhas_banco.drop_duplicates(subset=['Trilhas'], keep='first').copy()
+            # Adiciona coluna Código como primeira coluna, preenchendo pelo nome da trilha
+            codigos = []
+            for trilha in df_home['Trilhas']:
+                codigo = df_trilhas_banco.loc[df_trilhas_banco['Trilhas'] == trilha, 'Código'].astype(str).values
+                codigos.append(codigo[0] if len(codigo) > 0 else '')
+            if 'Código' in df_home.columns:
+                df_home['Código'] = codigos
+            else:
+                df_home.insert(0, 'Código', codigos)
+            # Adiciona coluna Data/Hora do Download se não existir
+            if 'Data/Hora' not in df_home.columns:
+                # Se existir a antiga, renomeia
+                if 'Data/Hora do Download' in df_home.columns:
+                    df_home = df_home.rename(columns={'Data/Hora do Download': 'Data/Hora'})
+                else:
+                    df_home['Data/Hora'] = ''
+            # Define ordem das colunas
+            colunas_exibir = ['Código', 'Trilhas', 'Status', 'Impresso por', 'Data', 'Hora', 'Data/Hora']
+            colunas_exibir = [c for c in colunas_exibir if c in df_home.columns]
+            st.dataframe(df_home[colunas_exibir])
+            # Ajuste visual para evitar rolagem horizontal
+            st.markdown('''
+                <style>
+                .element-container .stDataFrame, .stDataFrame {max-width: 100vw !important;}
+                .stDataFrame th, .stDataFrame td {
+                    white-space: pre-line !important;
+                    word-break: break-word !important;
+                    font-size: 0.95em !important;
+                }
+                .stDataFrame table {
+                    table-layout: auto !important;
+                }
+                </style>
+            ''', unsafe_allow_html=True)
+    # Impressão de Trilhas
+    elif pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
+        tela_impressao()
+    # Registre-se
+    elif pagina == "Registre-se" and not st.session_state['autenticado']:
+        tela_registre_se()
+    # Perfil
+    elif pagina == "Perfil" and not st.session_state.get('show_login', False):
+        tela_perfil()
+    # Configuração
+    elif pagina == "Configuração" and not st.session_state.get('show_login', False):
+        if not st.session_state['autenticado']:
+            st.warning("Faça login para acessar a página de configuração.")
+            st.stop()
+        tela_configuracao()
+
+# Rodapé
+st.markdown("""
+    <hr style='margin-top: 50px;'/>
+    <div style='text-align: center; color: #888;'>
+        &copy; 2024 Impressão de Trilhas. Todos os direitos reservados.
+    </div>
+""", unsafe_allow_html=True) 
