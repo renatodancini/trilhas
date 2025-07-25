@@ -135,20 +135,18 @@ def gerar_xlsx_para_trilha(nome_trilha, codigo, df_completo):
     
     # Salvar como XLSX com formatação
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        # Escrever o título da trilha na primeira linha
+        # Escrever o DataFrame primeiro para criar a worksheet
+        df_xlsx.to_excel(writer, sheet_name='Trilha', startrow=2, index=False)
+        
+        # Agora podemos acessar a worksheet
         worksheet = writer.sheets['Trilha']
+        workbook = writer.book
         
         # Título da trilha na primeira linha
         worksheet.write(0, 0, f"{codigo} - {nome_trilha}")
         
         # Linha vazia na segunda linha
         worksheet.write(1, 0, '')
-        
-        # Escrever o DataFrame a partir da terceira linha (índice 2)
-        df_xlsx.to_excel(writer, sheet_name='Trilha', startrow=2, index=False)
-        
-        # Obter o workbook para aplicar formatação
-        workbook = writer.book
         
         # Formatar o título da trilha (primeira linha)
         title_format = workbook.add_format({
