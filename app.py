@@ -18,14 +18,17 @@ inicializa_session_state()
 # st.write("DEBUG session_state:", dict(st.session_state))
 
 # IMPORTAÇÕES DAS TELAS E UTILITÁRIOS
-from tela_impressao import tela_impressao
+from home import home
+from gerar_xlsx import gerar_xlsx_para_trilha
+from controle_trilhas import criar_tabela_controle_execucao
 from tela_registre_se import tela_registre_se
 from tela_perfil import tela_perfil
 from tela_configuracao import tela_configuracao
 from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
-    salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por
+    salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
+    atualizar_status_impressao, atualizar_status_controle_trilhas
 )
 
 # Ao iniciar, tenta restaurar login
@@ -121,6 +124,7 @@ with st.sidebar:
     if st.session_state['autenticado']:
         opcoes_menu.append("Impressão de Trilhas")
         opcoes_menu.append("Perfil")
+        opcoes_menu.append("Controle de Trilhas")
         # Descobre tipo do usuário logado
         try:
             df_usuarios = pd.read_csv(USERS_FILE)
@@ -287,7 +291,9 @@ else:
             ''', unsafe_allow_html=True)
     # Impressão de Trilhas
     elif pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
-        tela_impressao()
+        # tela_impressao() # Removido
+        # Ajuste para usar a função home()
+        home()
     # Registre-se
     elif pagina == "Registre-se" and not st.session_state['autenticado']:
         tela_registre_se()
@@ -300,6 +306,98 @@ else:
             st.warning("Faça login para acessar a página de configuração.")
             st.stop()
         tela_configuracao()
+    # Controle de Trilhas
+    elif pagina == "Controle de Trilhas" and not st.session_state.get('show_login', False):
+        if not st.session_state['autenticado']:
+            st.warning("Faça login para acessar o controle de trilhas.")
+            st.stop()
+        
+        st.title('Controle de Execução das Trilhas')
+        st.info('Aqui você poderá categorizar e acompanhar a execução das trilhas.')
+        
+        # Criar tabela se não existir
+        criar_tabela_controle_execucao()
+        
+        # Funções auxiliares
+        def get_df():
+            conn = sqlite3.connect('database_2.db')
+            df = pd.read_sql_query('SELECT * FROM controle_execucao', conn)
+            conn.close()
+            return df
+        
+        def atualizar_categoria(trilha, nova_categoria):
+            conn2 = sqlite3.connect('database_2.db')
+            conn2.execute('UPDATE controle_execucao SET categoria = ? WHERE trilha = ?', (nova_categoria, trilha))
+            conn2.commit()
+            conn2.close()
+        
+        # Criar abas
+        aba1, aba2 = st.tabs(["Editar Categoria", "Tabela Completa"])
+        
+        with aba1:
+            df = get_df()
+            if not df.empty:
+                # Ocultar coluna id
+                df_edit = df.drop(columns=['id']) if 'id' in df.columns else df
+                
+                # Formatar trilha com código
+                conn_gestao = sqlite3.connect('login_status.db')
+                try:
+                    df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
+                except Exception:
+                    df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
+                conn_gestao.close()
+                
+                df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
+                df_edit = pd.merge(df_edit, df_gestao, left_on='trilha', right_on='Trilhas', how='left')
+                df_edit['trilha_formatada'] = df_edit['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_edit['trilha'].astype(str)
+                
+                # Criar editor de dados
+                edited_df = st.data_editor(
+                    df_edit[['trilha_formatada', 'categoria']],
+                    column_config={
+                        "trilha_formatada": st.column_config.TextColumn("Trilha", disabled=True),
+                        "categoria": st.column_config.NumberColumn("Categoria", min_value=1, max_value=10)
+                    },
+                    hide_index=True
+                )
+                
+                # Detectar mudanças e atualizar
+                if not edited_df.equals(df_edit[['trilha_formatada', 'categoria']]):
+                    for idx, row in edited_df.iterrows():
+                        trilha_original = df_edit.iloc[idx]['trilha']
+                        nova_categoria = row['categoria']
+                        atualizar_categoria(trilha_original, nova_categoria)
+                    st.success("Categorias atualizadas com sucesso!")
+                    st.rerun()
+            else:
+                st.warning("Nenhuma trilha encontrada na tabela de controle.")
+        
+        with aba2:
+            df_exec = get_df()
+            conn_gestao = sqlite3.connect('login_status.db')
+            try:
+                df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
+            except Exception:
+                df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
+            conn_gestao.close()
+            
+            df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
+            
+            conn2 = sqlite3.connect('database_2.db')
+            try:
+                df_ctrl = pd.read_sql_query('SELECT Trilhas, Status, "Modificado por", "Modificado em" FROM controle_trilhas', conn2)
+            except Exception:
+                df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
+            conn2.close()
+            
+            df_merged = pd.merge(df_exec, df_gestao, left_on='trilha', right_on='Trilhas', how='left')
+            df_merged = pd.merge(df_merged, df_ctrl, left_on='trilha', right_on='Trilhas', how='left', suffixes=('', '_ctrl'))
+            df_merged['Trilha'] = df_merged['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_merged['trilha'].astype(str)
+            
+            colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em']
+            colunas_existentes = [col for col in colunas_exibir if col in df_merged.columns]
+            st.dataframe(df_merged[colunas_existentes])
 
 # Rodapé
 st.markdown("""
