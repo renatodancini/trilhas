@@ -229,12 +229,14 @@ else:
                 codigo_selecionado, nome_selecionado = trilha_combo.split(' - ', 1)
             else:
                 codigo_selecionado, nome_selecionado = '', ''
-            if st.button('Imprimir', key='btn_imprimir_home') and trilha_combo:
-                st.session_state['trilha_impressao'] = nome_selecionado
-                st.session_state['codigo_impressao'] = codigo_selecionado
-                st.session_state['show_impressao'] = True
-                st.session_state['pagina'] = 'Impressão de Trilhas'
-                st.rerun()
+            # Exibe o botão de imprimir apenas para usuários autenticados
+            if st.session_state.get('autenticado', False):
+                if st.button('Imprimir', key='btn_imprimir_home') and trilha_combo:
+                    st.session_state['trilha_impressao'] = nome_selecionado
+                    st.session_state['codigo_impressao'] = codigo_selecionado
+                    st.session_state['show_impressao'] = True
+                    st.session_state['pagina'] = 'Impressão de Trilhas'
+                    st.rerun()
         if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
             # Troca o nome da coluna se necessário
             if 'Responsável' in df_trilhas_banco.columns:
