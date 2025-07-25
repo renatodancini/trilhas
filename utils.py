@@ -196,23 +196,37 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         title_format = workbook.add_format({
             'bold': True,
             'font_size': 14,
-            'align': 'left'
+            'align': 'left',
+            'border': 1
         })
         worksheet.set_row(0, 20, title_format)
         
-        # Formatar o cabeçalho (terceira linha) - fundo cinza escuro, texto branco em negrito
+        # Formatar o cabeçalho (terceira linha) - fundo cinza claro, texto branco em negrito
         header_format = workbook.add_format({
             'bold': True,
             'font_color': 'white',
-            'bg_color': '#404040',
+            'bg_color': '#808080',  # Cinza mais claro
             'align': 'center',
             'valign': 'vcenter',
             'border': 1
         })
         
+        # Formato para as células de dados (atividades) - com bordas
+        data_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True
+        })
+        
         # Aplicar formatação ao cabeçalho
         for col_num, value in enumerate(df_atividades.columns.values):
             worksheet.write(2, col_num, value, header_format)
+        
+        # Aplicar formatação às células de dados (atividades)
+        for row_num in range(len(df_atividades)):
+            for col_num in range(len(df_atividades.columns)):
+                worksheet.write(row_num + 3, col_num, df_atividades.iloc[row_num, col_num], data_format)
         
         # Ajustar largura das colunas
         worksheet.set_column('A:A', 60)  # Atividades
