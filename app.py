@@ -261,54 +261,29 @@ else:
                     # Marcar como impresso para usuários normais
                     if tipo_usuario != 'Administrador':
                         st.session_state[chave_impresso] = True
+        
+        # Exibir tabela completa com todos os dados
         if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
-            # Troca o nome da coluna se necessário
-            if 'Responsável' in df_trilhas_banco.columns:
-                df_trilhas_banco = df_trilhas_banco.rename(columns={'Responsável': 'Impresso por'})
-            if 'Status da Trilha' in df_trilhas_banco.columns:
-                df_trilhas_banco = df_trilhas_banco.rename(columns={'Status da Trilha': 'Status'})
-            # Preenche status automático apenas se a coluna não existir
-            if 'Status' not in df_trilhas_banco.columns:
-                df_trilhas_banco['Status'] = 'N/ Impresso'
-            # Não sobrescrever o status se já existir (mantém 'Impresso' após download)
-            if 'Impresso por' not in df_trilhas_banco.columns:
-                df_trilhas_banco['Impresso por'] = ''
-            # Seleciona apenas a primeira ocorrência de cada trilha
-            df_home = df_trilhas_banco.drop_duplicates(subset=['Trilhas'], keep='first').copy()
-            # Adiciona coluna Código como primeira coluna, preenchendo pelo nome da trilha
-            codigos = []
-            for trilha in df_home['Trilhas']:
-                codigo = df_trilhas_banco.loc[df_trilhas_banco['Trilhas'] == trilha, 'Código'].astype(str).values
-                codigos.append(codigo[0] if len(codigo) > 0 else '')
-            if 'Código' in df_home.columns:
-                df_home['Código'] = codigos
-            else:
-                df_home.insert(0, 'Código', codigos)
-            # Adiciona coluna Data/Hora do Download se não existir
-            if 'Data/Hora' not in df_home.columns:
-                # Se existir a antiga, renomeia
-                if 'Data/Hora do Download' in df_home.columns:
-                    df_home = df_home.rename(columns={'Data/Hora do Download': 'Data/Hora'})
-                else:
-                    df_home['Data/Hora'] = ''
-            # Define ordem das colunas
-            colunas_exibir = ['Código', 'Trilhas', 'Status', 'Impresso por', 'Data', 'Hora', 'Data/Hora']
-            colunas_exibir = [c for c in colunas_exibir if c in df_home.columns]
-            st.dataframe(df_home[colunas_exibir])
-            # Ajuste visual para evitar rolagem horizontal
-            st.markdown('''
-                <style>
-                .element-container .stDataFrame, .stDataFrame {max-width: 100vw !important;}
-                .stDataFrame th, .stDataFrame td {
-                    white-space: pre-line !important;
-                    word-break: break-word !important;
-                    font-size: 0.95em !important;
-                }
-                .stDataFrame table {
-                    table-layout: auto !important;
-                }
-                </style>
-            ''', unsafe_allow_html=True)
+            # Formatar trilhas com código
+            df_trilhas_banco['Trilha'] = df_trilhas_banco['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_trilhas_banco['Trilhas'].astype(str)
+            
+            # Buscar dados do database_2.db para complementar
+            conn2 = sqlite3.connect('database_2.db')
+            try:
+                df_ctrl = pd.read_sql_query('SELECT Trilhas, Status, "Modificado por", "Modificado em" FROM controle_trilhas', conn2)
+            except Exception:
+                df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
+            conn2.close()
+            
+            # Mesclar dados
+            df_completo = pd.merge(df_trilhas_banco, df_ctrl, left_on='Trilhas', right_on='Trilhas', how='left', suffixes=('', '_ctrl'))
+            
+            # Definir colunas para exibir
+            colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em']
+            colunas_existentes = [col for col in colunas_exibir if col in df_completo.columns]
+            
+            st.write('### Controle de Trilhas')
+            st.dataframe(df_completo[colunas_existentes])
     # Registre-se
     elif pagina == "Registre-se" and not st.session_state['autenticado']:
         tela_registre_se()
