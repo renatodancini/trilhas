@@ -131,39 +131,14 @@ def atualiza_status_trilha(trilha, status, impresso_por=None, data=None, hora=No
     conn.close()
 
 def limpa_coluna_impresso_por():
+    """Limpa a coluna 'Impresso por' da tabela gestao_trilhas"""
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query('SELECT * FROM gestao_trilhas', conn)
-    if 'Impresso por' in df.columns:
-        df['Impresso por'] = ''
-        df.to_sql('gestao_trilhas', conn, if_exists='replace', index=False)
-    conn.close()
-
-def atualizar_status_impressao(trilha, usuario):
-    """
-    Atualiza o status da trilha para 'Impresso' no banco login_status.db
-    """
-    import datetime
-    conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query('SELECT * FROM gestao_trilhas', conn)
-    idx = df[df['Trilhas'] == trilha].index
-    if not idx.empty:
-        df.loc[idx, 'Status'] = 'Impresso'
-        df.loc[idx, 'Modificado por'] = usuario
-        df.loc[idx, 'Modificado em'] = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        df.to_sql('gestao_trilhas', conn, if_exists='replace', index=False)
-    conn.close()
-
-def atualizar_status_controle_trilhas(trilha, usuario, db_path='database_2.db'):
-    """
-    Atualiza o status da trilha para 'Impresso' no banco database_2.db
-    """
-    import datetime
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query('SELECT * FROM controle_trilhas', conn)
-    idx = df[df['Trilhas'] == trilha].index
-    if not idx.empty:
-        df.loc[idx, 'Status'] = 'Impresso'
-        df.loc[idx, 'Modificado por'] = usuario
-        df.loc[idx, 'Modificado em'] = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        df.to_sql('controle_trilhas', conn, if_exists='replace', index=False)
-    conn.close() 
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE gestao_trilhas SET 'Responsável' = ''")
+        conn.commit()
+        print("Coluna 'Impresso por' limpa com sucesso!")
+    except Exception as e:
+        print(f"Erro ao limpar coluna: {e}")
+    finally:
+        conn.close() 
