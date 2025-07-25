@@ -235,12 +235,27 @@ else:
                 codigo_selecionado, nome_selecionado = '', ''
             # Exibe o botão de imprimir apenas para usuários autenticados
             if st.session_state.get('autenticado', False):
-                if st.button('Imprimir', key='btn_imprimir_home') and trilha_combo:
-                    st.session_state['trilha_impressao'] = nome_selecionado
-                    st.session_state['codigo_impressao'] = codigo_selecionado
-                    st.session_state['show_impressao'] = True
-                    st.session_state['pagina'] = 'Impressão de Trilhas'
-                    st.rerun()
+                # Verificar se o usuário pode imprimir (regra: usuários normais só uma vez, admins sempre)
+                tipo_usuario = st.session_state.get('tipo', 'Usuário')
+                chave_impresso = f'imprimiu_{nome_selecionado}'
+                bloqueado = st.session_state.get(chave_impresso, False)
+                pode_imprimir = (tipo_usuario == 'Administrador') or not bloqueado
+                
+                if st.button('Imprimir', key='btn_imprimir_home', disabled=not pode_imprimir) and trilha_combo:
+                    # Fazer download direto do XLSX
+                    usuario_logado = st.session_state.get('usuario', 'Usuário')
+                    atualizar_status_impressao(nome_selecionado, usuario_logado)
+                    atualizar_status_controle_trilhas(nome_selecionado, usuario_logado)
+                    xlsx_bytes = gerar_xlsx_para_trilha(nome_selecionado, codigo_selecionado, df_trilhas_banco)
+                    st.download_button(
+                        label='Download XLSX',
+                        data=xlsx_bytes,
+                        file_name=f'{codigo_selecionado}_{nome_selecionado}.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                    # Marcar como impresso para usuários normais
+                    if tipo_usuario != 'Administrador':
+                        st.session_state[chave_impresso] = True
         if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
             # Troca o nome da coluna se necessário
             if 'Responsável' in df_trilhas_banco.columns:
