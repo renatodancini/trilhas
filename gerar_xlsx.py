@@ -133,9 +133,51 @@ def gerar_xlsx_para_trilha(nome_trilha, codigo, df_completo):
     # Criar buffer para o arquivo
     buffer = io.BytesIO()
     
-    # Salvar como XLSX
+    # Salvar como XLSX com formatação
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df_xlsx.to_excel(writer, sheet_name='Trilha', index=False)
+        # Escrever o título da trilha na primeira linha
+        worksheet = writer.sheets['Trilha']
+        
+        # Título da trilha na primeira linha
+        worksheet.write(0, 0, f"{codigo} - {nome_trilha}")
+        
+        # Linha vazia na segunda linha
+        worksheet.write(1, 0, '')
+        
+        # Escrever o DataFrame a partir da terceira linha (índice 2)
+        df_xlsx.to_excel(writer, sheet_name='Trilha', startrow=2, index=False)
+        
+        # Obter o workbook para aplicar formatação
+        workbook = writer.book
+        
+        # Formatar o título da trilha (primeira linha)
+        title_format = workbook.add_format({
+            'bold': True,
+            'font_size': 14,
+            'align': 'left'
+        })
+        worksheet.set_row(0, 20, title_format)
+        
+        # Formatar o cabeçalho (terceira linha) - fundo cinza escuro, texto branco em negrito
+        header_format = workbook.add_format({
+            'bold': True,
+            'font_color': 'white',
+            'bg_color': '#404040',
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        
+        # Aplicar formatação ao cabeçalho
+        for col_num, value in enumerate(df_xlsx.columns.values):
+            worksheet.write(2, col_num, value, header_format)
+        
+        # Ajustar largura das colunas
+        worksheet.set_column('A:A', 60)  # Atividade
+        worksheet.set_column('B:B', 30)  # Responsável
+        worksheet.set_column('C:C', 15)  # Tipo
+        worksheet.set_column('D:D', 15)  # Finalizado
+        worksheet.set_column('E:E', 20)  # Observações
     
     buffer.seek(0)
     return buffer.read() 
