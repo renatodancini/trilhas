@@ -154,14 +154,25 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     # Buscar atividades da trilha no banco de dados
     conn = sqlite3.connect(DB_FILE)
     try:
+        # Buscar todas as atividades da trilha específica
         df_atividades = pd.read_sql_query(
-            'SELECT Atividades, Responsável, Tipo, Observações FROM gestao_trilhas WHERE Trilhas = ?', 
+            'SELECT Atividade, Responsável, Tipo, Observações FROM gestao_trilhas WHERE Trilhas = ? ORDER BY rowid', 
             conn, 
             params=[nome_trilha]
         )
-    except Exception:
-        df_atividades = pd.DataFrame(columns=['Atividades', 'Responsável', 'Tipo', 'Observações'])
-    conn.close()
+        
+        # Se não encontrou atividades, criar um DataFrame vazio com as colunas corretas
+        if df_atividades.empty:
+            df_atividades = pd.DataFrame(columns=['Atividade', 'Responsável', 'Tipo', 'Observações'])
+            print(f"Nenhuma atividade encontrada para a trilha: {nome_trilha}")
+        else:
+            print(f"Encontradas {len(df_atividades)} atividades para a trilha: {nome_trilha}")
+            
+    except Exception as e:
+        print(f"Erro ao buscar atividades: {e}")
+        df_atividades = pd.DataFrame(columns=['Atividade', 'Responsável', 'Tipo', 'Observações'])
+    finally:
+        conn.close()
     
     # Criar buffer para o arquivo
     buffer = io.BytesIO()
