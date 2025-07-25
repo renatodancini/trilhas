@@ -175,6 +175,22 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
     st.write('### Gestão das Trilhas')
     df_trilhas_banco = busca_gestao_trilhas()
     
+    # Criar combobox com as trilhas
+    if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
+        # Buscar trilhas únicas com código
+        trilhas_unicas = df_trilhas_banco[['Código', 'Trilhas']].drop_duplicates().dropna(subset=['Trilhas'])
+        opcoes_combo = [f"{row['Código']} - {row['Trilhas']}" for _, row in trilhas_unicas.iterrows()]
+        
+        # Combobox para seleção de trilha
+        trilha_selecionada = st.selectbox(
+            'Selecione uma trilha:',
+            options=[''] + opcoes_combo,
+            key='combo_trilhas'
+        )
+        
+        if trilha_selecionada:
+            st.write(f'**Trilha selecionada:** {trilha_selecionada}')
+    
     # Exibir tabela completa com todos os dados
     if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
         # Buscar dados diretamente do database_2.db
