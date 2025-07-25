@@ -25,7 +25,8 @@ from tela_configuracao import tela_configuracao
 from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
-    salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por
+    salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
+    gerar_xlsx_trilha
 )
 
 # Ao iniciar, tenta restaurar login
@@ -190,6 +191,22 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         
         if trilha_selecionada:
             st.write(f'**Trilha selecionada:** {trilha_selecionada}')
+            
+            # Botão Imprimir
+            if st.button('Imprimir', key='btn_imprimir'):
+                # Extrair código e nome da trilha
+                codigo_trilha, nome_trilha = trilha_selecionada.split(' - ', 1)
+                
+                # Gerar arquivo XLSX
+                xlsx_bytes = gerar_xlsx_trilha(nome_trilha, codigo_trilha)
+                
+                # Botão de download
+                st.download_button(
+                    label='Download XLSX',
+                    data=xlsx_bytes,
+                    file_name=f'{codigo_trilha}_{nome_trilha}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
     
     # Exibir tabela completa com todos os dados
     if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:

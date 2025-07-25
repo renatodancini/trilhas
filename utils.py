@@ -141,4 +141,73 @@ def limpa_coluna_impresso_por():
     except Exception as e:
         print(f"Erro ao limpar coluna: {e}")
     finally:
-        conn.close() 
+        conn.close()
+
+def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
+    """
+    Gera um arquivo XLSX para uma trilha específica com as atividades do banco de dados.
+    """
+    import pandas as pd
+    import io
+    import datetime
+    
+    # Buscar atividades da trilha no banco de dados
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        df_atividades = pd.read_sql_query(
+            'SELECT Atividades, Responsável, Tipo, Observações FROM gestao_trilhas WHERE Trilhas = ?', 
+            conn, 
+            params=[nome_trilha]
+        )
+    except Exception:
+        df_atividades = pd.DataFrame(columns=['Atividades', 'Responsável', 'Tipo', 'Observações'])
+    conn.close()
+    
+    # Criar buffer para o arquivo
+    buffer = io.BytesIO()
+    
+    # Salvar como XLSX com formatação
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        # Escrever o DataFrame primeiro para criar a worksheet
+        df_atividades.to_excel(writer, sheet_name='Trilha', startrow=2, index=False)
+        
+        # Agora podemos acessar a worksheet
+        worksheet = writer.sheets['Trilha']
+        workbook = writer.book
+        
+        # Título da trilha na primeira linha
+        worksheet.write(0, 0, f"{codigo_trilha} - {nome_trilha}")
+        
+        # Linha vazia na segunda linha
+        worksheet.write(1, 0, '')
+        
+        # Formatar o título da trilha (primeira linha)
+        title_format = workbook.add_format({
+            'bold': True,
+            'font_size': 14,
+            'align': 'left'
+        })
+        worksheet.set_row(0, 20, title_format)
+        
+        # Formatar o cabeçalho (terceira linha) - fundo cinza escuro, texto branco em negrito
+        header_format = workbook.add_format({
+            'bold': True,
+            'font_color': 'white',
+            'bg_color': '#404040',
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        
+        # Aplicar formatação ao cabeçalho
+        for col_num, value in enumerate(df_atividades.columns.values):
+            worksheet.write(2, col_num, value, header_format)
+        
+        # Ajustar largura das colunas
+        worksheet.set_column('A:A', 60)  # Atividades
+        worksheet.set_column('B:B', 30)  # Responsável
+        worksheet.set_column('C:C', 15)  # Tipo
+        worksheet.set_column('D:D', 20)  # Observações
+    
+    buffer.seek(0)
+    return buffer.read() 
