@@ -272,6 +272,9 @@ else:
                 df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
             conn2.close()
             
+            # Remover duplicatas da tabela controle_trilhas
+            df_ctrl = df_ctrl.drop_duplicates(subset=['Trilhas'])
+            
             # Formatar trilhas com código
             df_ctrl['Trilha'] = df_ctrl['Trilhas'].apply(lambda x: x if pd.notnull(x) and x else '')
             
@@ -282,6 +285,9 @@ else:
             except Exception:
                 df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
             conn_gestao.close()
+            
+            # Remover duplicatas da tabela gestao_trilhas
+            df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
             
             # Mesclar para obter os códigos
             df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
