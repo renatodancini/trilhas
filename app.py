@@ -18,7 +18,6 @@ inicializa_session_state()
 # st.write("DEBUG session_state:", dict(st.session_state))
 
 # IMPORTAÇÕES DAS TELAS E UTILITÁRIOS
-from home import home
 from gerar_xlsx import gerar_xlsx_para_trilha
 from controle_trilhas import criar_tabela_controle_execucao
 from tela_registre_se import tela_registre_se
@@ -68,7 +67,7 @@ def estilo_menu_lateral():
     ''', unsafe_allow_html=True)
 
 # Configuração da página
-st.set_page_config(page_title="Impressão de Trilhas - Home", layout="wide")
+st.set_page_config(page_title="Impressão de Trilhas", layout="wide")
 
 # Aplica o estilo customizado ao menu lateral
 estilo_menu_lateral()
@@ -119,7 +118,7 @@ with header_btn_col:
 
 # Menu lateral
 with st.sidebar:
-    opcoes_menu = ["Home"]
+    opcoes_menu = []
     # Só mostra Impressão de Trilhas e Configuração para usuários logados
     if st.session_state['autenticado']:
         opcoes_menu.append("Impressão de Trilhas")
@@ -135,6 +134,11 @@ with st.sidebar:
             pass
     else:
         opcoes_menu.append("Registre-se")
+    
+    # Se não há opções no menu, adicionar uma opção padrão
+    if not opcoes_menu:
+        opcoes_menu.append("Registre-se")
+    
     pagina = st.radio("", opcoes_menu)
     st.markdown('<div class="sidebar-footer"></div>', unsafe_allow_html=True)
     if st.session_state['autenticado']:
@@ -220,7 +224,8 @@ if st.session_state.get('show_impressao', False):
         except AttributeError:
             st.experimental_rerun()
 else:
-    if pagina == "Home" and not st.session_state.get('show_login', False):
+    # Impressão de Trilhas
+    if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
         st.write('### Gestão das Trilhas')
         df_trilhas_banco = busca_gestao_trilhas()
         trilha_selecionada = None
@@ -304,11 +309,6 @@ else:
                 }
                 </style>
             ''', unsafe_allow_html=True)
-    # Impressão de Trilhas
-    elif pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
-        # tela_impressao() # Removido
-        # Ajuste para usar a função home()
-        home()
     # Registre-se
     elif pagina == "Registre-se" and not st.session_state['autenticado']:
         tela_registre_se()
