@@ -264,10 +264,7 @@ else:
         
         # Exibir tabela completa com todos os dados
         if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
-            # Formatar trilhas com código
-            df_trilhas_banco['Trilha'] = df_trilhas_banco['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_trilhas_banco['Trilhas'].astype(str)
-            
-            # Buscar dados do database_2.db para complementar
+            # Buscar dados diretamente do database_2.db
             conn2 = sqlite3.connect('database_2.db')
             try:
                 df_ctrl = pd.read_sql_query('SELECT Trilhas, Status, "Modificado por", "Modificado em" FROM controle_trilhas', conn2)
@@ -275,15 +272,27 @@ else:
                 df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
             conn2.close()
             
-            # Mesclar dados
-            df_completo = pd.merge(df_trilhas_banco, df_ctrl, left_on='Trilhas', right_on='Trilhas', how='left', suffixes=('', '_ctrl'))
+            # Formatar trilhas com código
+            df_ctrl['Trilha'] = df_ctrl['Trilhas'].apply(lambda x: x if pd.notnull(x) and x else '')
+            
+            # Buscar códigos das trilhas do login_status.db
+            conn_gestao = sqlite3.connect('login_status.db')
+            try:
+                df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
+            except Exception:
+                df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
+            conn_gestao.close()
+            
+            # Mesclar para obter os códigos
+            df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
+            df_final['Trilha'] = df_final['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_final['Trilhas'].astype(str)
             
             # Definir colunas para exibir
             colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em']
-            colunas_existentes = [col for col in colunas_exibir if col in df_completo.columns]
+            colunas_existentes = [col for col in colunas_exibir if col in df_final.columns]
             
             st.write('### Controle de Trilhas')
-            st.dataframe(df_completo[colunas_existentes])
+            st.dataframe(df_final[colunas_existentes])
     # Registre-se
     elif pagina == "Registre-se" and not st.session_state['autenticado']:
         tela_registre_se()
