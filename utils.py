@@ -196,8 +196,7 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         title_format = workbook.add_format({
             'bold': True,
             'font_size': 14,
-            'align': 'left',
-            'border': 1
+            'align': 'left'
         })
         worksheet.set_row(0, 20, title_format)
         
