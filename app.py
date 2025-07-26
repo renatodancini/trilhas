@@ -218,6 +218,13 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
             df_ctrl = pd.read_sql_query('SELECT Trilhas, Status, "Modificado por", "Modificado em" FROM controle_trilhas', conn2)
         except Exception:
             df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
+        
+        # Buscar dados da tabela controle_execucao para obter as categorias
+        try:
+            df_exec = pd.read_sql_query('SELECT trilha, categoria FROM controle_execucao', conn2)
+        except Exception:
+            df_exec = pd.DataFrame(columns=['trilha', 'categoria'])
+        
         conn2.close()
         
         # Remover duplicatas da tabela controle_trilhas
@@ -241,9 +248,17 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
         df_final['Trilha'] = df_final['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_final['Trilhas'].astype(str)
         
+        # Mesclar com os dados de categoria
+        df_final = pd.merge(df_final, df_exec, left_on='Trilhas', right_on='trilha', how='left')
+        
         # Definir colunas para exibir
-        colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em']
+        colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em', 'categoria']
         colunas_existentes = [col for col in colunas_exibir if col in df_final.columns]
+        
+        # Renomear coluna categoria para Categoria
+        if 'categoria' in df_final.columns:
+            df_final = df_final.rename(columns={'categoria': 'Categoria'})
+            colunas_existentes = [col if col != 'categoria' else 'Categoria' for col in colunas_existentes]
         
         st.write('### Controle de Trilhas')
         st.dataframe(df_final[colunas_existentes])
