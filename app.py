@@ -190,8 +190,6 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         )
         
         if trilha_selecionada:
-            st.write(f'**Trilha selecionada:** {trilha_selecionada}')
-            
             # Botão Imprimir
             if st.button('Imprimir', key='btn_imprimir'):
                 # Extrair código e nome da trilha
