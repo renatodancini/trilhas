@@ -26,7 +26,7 @@ from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
     salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
-    gerar_xlsx_trilha
+    gerar_xlsx_trilha, atualizar_status_download
 )
 
 # Ao iniciar, tenta restaurar login
@@ -197,6 +197,10 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                 
                 # Gerar arquivo XLSX
                 xlsx_bytes = gerar_xlsx_trilha(nome_trilha, codigo_trilha)
+                
+                # Atualizar status no database_2.db
+                if st.session_state['autenticado']:
+                    atualizar_status_download(nome_trilha, st.session_state['usuario'])
                 
                 # Botão de download
                 st.download_button(

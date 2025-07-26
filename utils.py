@@ -235,3 +235,35 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     
     buffer.seek(0)
     return buffer.read() 
+
+def atualizar_status_download(nome_trilha, usuario_logado):
+    """
+    Atualiza as colunas Status, Modificado por e Modificado em no database_2.db
+    quando um download é realizado.
+    """
+    import datetime
+    
+    # Conectar ao database_2.db
+    conn = sqlite3.connect('database_2.db')
+    c = conn.cursor()
+    
+    try:
+        # Data e hora atual
+        data_hora_atual = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        
+        # Atualizar as colunas para a trilha específica
+        c.execute('''
+            UPDATE controle_trilhas 
+            SET Status = ?, "Modificado por" = ?, "Modificado em" = ? 
+            WHERE Trilhas = ?
+        ''', ('Impresso', usuario_logado, data_hora_atual, nome_trilha))
+        
+        conn.commit()
+        print(f"Status atualizado para trilha: {nome_trilha}")
+        print(f"Usuário: {usuario_logado}")
+        print(f"Data/Hora: {data_hora_atual}")
+        
+    except Exception as e:
+        print(f"Erro ao atualizar status: {e}")
+    finally:
+        conn.close() 
