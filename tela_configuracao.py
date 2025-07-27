@@ -91,11 +91,27 @@ def tela_configuracao():
         if arquivo is not None:
             import io
             if arquivo.name.endswith('.csv'):
-                df_upload = pd.read_csv(arquivo)
+                try:
+                    df_upload = pd.read_csv(arquivo)
+                except Exception as e:
+                    st.error(f"Erro ao ler arquivo CSV: {e}")
+                    return
             else:
-                xls = pd.ExcelFile(arquivo)
-                if 'Impressão' in xls.sheet_names:
-                    df_upload = pd.read_excel(xls, sheet_name='Impressão')
+                # Verificar se openpyxl está disponível
+                try:
+                    import openpyxl
+                    xls = pd.ExcelFile(arquivo)
+                    if 'Impressão' in xls.sheet_names:
+                        df_upload = pd.read_excel(xls, sheet_name='Impressão')
+                    else:
+                        st.error("A aba 'Impressão' não foi encontrada no arquivo Excel.")
+                        return
+                except ImportError:
+                    st.error("Biblioteca openpyxl não está instalada. Execute: pip install openpyxl")
+                    return
+                except Exception as e:
+                    st.error(f"Erro ao ler arquivo Excel: {e}")
+                    return
                     df_upload = df_upload.copy()
                     titulo_col = []
                     titulo_atual = None
