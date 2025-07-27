@@ -127,7 +127,7 @@ with st.sidebar:
         try:
             df_usuarios = pd.read_csv(USERS_FILE)
             tipo_usuario = df_usuarios[df_usuarios['nome'] == st.session_state['usuario']]['tipo'].values
-            if len(tipo_usuario) > 0 and tipo_usuario[0] == 'Administrador':
+            if len(tipo_usuario) > 0 and tipo_usuario[0] == 'admin':
                 opcoes_menu.append("Configuração")
         except Exception:
             pass
