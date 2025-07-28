@@ -191,16 +191,41 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
     conn_gestao.close()
     
+    # Limpar duplicatas
+    df_trilhas_controle = df_trilhas_controle.drop_duplicates(subset=['Trilhas'])
+    df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
+    
     # Mesclar para obter os códigos das trilhas principais
     df_trilhas_completas = pd.merge(df_trilhas_controle, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
+    
+    # Remover duplicatas da mesclagem
+    df_trilhas_completas = df_trilhas_completas.drop_duplicates(subset=['Trilhas'])
     
     # Criar combobox com as trilhas principais
     if not df_trilhas_completas.empty:
         opcoes_combo = []
         for _, row in df_trilhas_completas.iterrows():
-            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] else ''
+            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] and row['Código'] != 'nan' else ''
             trilha = row['Trilhas']
-            opcoes_combo.append(f"{codigo} - {trilha}" if codigo else trilha)
+            
+            # Se não tem código, tentar extrair do nome da trilha
+            if not codigo:
+                import re
+                padrao = r'^(CMR\s*\d+\.?\d*)'
+                match = re.search(padrao, str(trilha), re.IGNORECASE)
+                if match:
+                    codigo = match.group(1).strip()
+            
+            # Criar opção sem duplicação
+            if codigo:
+                opcao = f"{codigo} - {trilha}"
+            else:
+                opcao = trilha
+            
+            opcoes_combo.append(opcao)
+        
+        # Remover duplicatas das opções
+        opcoes_combo = list(dict.fromkeys(opcoes_combo))
         
         # Combobox para seleção de trilha
         trilha_selecionada = st.selectbox(
@@ -213,7 +238,11 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
             # Botão Imprimir
             if st.button('Imprimir', key='btn_imprimir'):
                 # Extrair código e nome da trilha
-                codigo_trilha, nome_trilha = trilha_selecionada.split(' - ', 1)
+                if ' - ' in trilha_selecionada:
+                    codigo_trilha, nome_trilha = trilha_selecionada.split(' - ', 1)
+                else:
+                    codigo_trilha = ''
+                    nome_trilha = trilha_selecionada
                 
                 # Gerar arquivo XLSX
                 xlsx_bytes = gerar_xlsx_trilha(nome_trilha, codigo_trilha)
@@ -252,7 +281,23 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         
         # Mesclar para obter os códigos
         df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
-        df_final['Trilha'] = df_final['Código'].apply(lambda x: f'{x} - ' if pd.notnull(x) and x else '') + df_final['Trilhas'].astype(str)
+        
+        # Formatar coluna Trilha sem duplicação
+        def formatar_trilha(row):
+            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] and row['Código'] != 'nan' else ''
+            trilha = row['Trilhas']
+            
+            # Se não tem código, tentar extrair do nome da trilha
+            if not codigo:
+                import re
+                padrao = r'^(CMR\s*\d+\.?\d*)'
+                match = re.search(padrao, str(trilha), re.IGNORECASE)
+                if match:
+                    codigo = match.group(1).strip()
+            
+            return f"{codigo} - {trilha}" if codigo else trilha
+        
+        df_final['Trilha'] = df_final.apply(formatar_trilha, axis=1)
         
         # Mesclar com os dados de categoria
         df_final = pd.merge(df_final, df_exec, left_on='Trilhas', right_on='trilha', how='left')
