@@ -112,31 +112,47 @@ def tela_configuracao():
                 except Exception as e:
                     st.error(f"Erro ao ler arquivo Excel: {e}")
                     return
-                    df_upload = df_upload.copy()
-                    titulo_col = []
-                    titulo_atual = None
-                    for idx, row in df_upload.iterrows():
-                        is_titulo = not row.astype(str).str.contains('BPH', na=False).any()
-                        if is_titulo:
-                            titulo_atual = str(row.iloc[0])
-                        titulo_col.append(titulo_atual)
-                    df_upload['titulo'] = titulo_col
-                    salva_impressao_upload(df_upload)
+            
+            # Processar e salvar os dados (para ambos CSV e Excel)
+            if 'df_upload' in locals():
+                df_upload = df_upload.copy()
+                titulo_col = []
+                titulo_atual = None
+                for idx, row in df_upload.iterrows():
+                    is_titulo = not row.astype(str).str.contains('BPH', na=False).any()
+                    if is_titulo:
+                        titulo_atual = str(row.iloc[0])
+                    titulo_col.append(titulo_atual)
+                df_upload['titulo'] = titulo_col
+                
+                # Salvar dados de upload
+                if salva_impressao_upload(df_upload):
                     st.success("Dados da aba 'Impressão' salvos no banco de dados!")
-                    limpa_gestao_trilhas()
-                    colunas_trilhas = ["Trilhas", "Atividade", "Responsável", "Tipo", "Finalizado", "Observações", "Código"]
-                    df_trilhas = pd.DataFrame(columns=colunas_trilhas)
-                    if df_upload.shape[1] >= 7:
-                        df_trilhas = pd.DataFrame({
-                            "Trilhas": df_upload.iloc[:, 0],
-                            "Atividade": df_upload.iloc[:, 1],
-                            "Responsável": df_upload.iloc[:, 2],
-                            "Tipo": df_upload.iloc[:, 3],
-                            "Finalizado": df_upload.iloc[:, 4],
-                            "Observações": df_upload.iloc[:, 5],
-                            "Código": df_upload.iloc[:, 6],
-                        })
-                    salva_gestao_trilhas(df_trilhas)
+                else:
+                    st.error("Erro ao salvar dados de upload!")
+                    return
+                
+                # Limpar e criar nova tabela de gestão
+                limpa_gestao_trilhas()
+                colunas_trilhas = ["Trilhas", "Atividade", "Responsável", "Tipo", "Finalizado", "Observações", "Código"]
+                df_trilhas = pd.DataFrame(columns=colunas_trilhas)
+                
+                if df_upload.shape[1] >= 7:
+                    df_trilhas = pd.DataFrame({
+                        "Trilhas": df_upload.iloc[:, 0],
+                        "Atividade": df_upload.iloc[:, 1],
+                        "Responsável": df_upload.iloc[:, 2],
+                        "Tipo": df_upload.iloc[:, 3],
+                        "Finalizado": df_upload.iloc[:, 4],
+                        "Observações": df_upload.iloc[:, 5],
+                        "Código": df_upload.iloc[:, 6],
+                    })
+                
+                # Salvar dados de gestão
+                if salva_gestao_trilhas(df_trilhas):
+                    st.success("Tabela de gestão de trilhas atualizada com sucesso!")
+                else:
+                    st.error("Erro ao salvar tabela de gestão de trilhas!")
         st.write("### Tabela de Gestão de Trilhas")
         df_trilhas_banco = busca_gestao_trilhas()
         if df_trilhas_banco is not None:

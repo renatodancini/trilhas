@@ -71,13 +71,31 @@ def cadastra_usuario(nome, email, senha, tipo):
 
 def salva_impressao_upload(df):
     import json
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    colunas = list(df.columns)
-    dados = df.values.tolist()
-    c.execute('INSERT INTO impressao_upload (colunas, dados) VALUES (?, ?)', (json.dumps(colunas), json.dumps(dados)))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        
+        # Limpar dados anteriores
+        c.execute('DELETE FROM impressao_upload')
+        
+        colunas = list(df.columns)
+        dados = df.values.tolist()
+        
+        print(f"Salvando {len(dados)} linhas com {len(colunas)} colunas")
+        print(f"Colunas: {colunas}")
+        
+        c.execute('INSERT INTO impressao_upload (colunas, dados) VALUES (?, ?)', 
+                 (json.dumps(colunas), json.dumps(dados)))
+        conn.commit()
+        conn.close()
+        
+        print("Dados salvos com sucesso na tabela impressao_upload")
+        return True
+    except Exception as e:
+        print(f"Erro ao salvar dados: {e}")
+        if 'conn' in locals():
+            conn.close()
+        return False
 
 def busca_impressao_upload():
     import json
@@ -93,9 +111,22 @@ def busca_impressao_upload():
     return None
 
 def salva_gestao_trilhas(df):
-    conn = sqlite3.connect(DB_FILE)
-    df.to_sql('gestao_trilhas', conn, if_exists='replace', index=False)
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        
+        print(f"Salvando {len(df)} linhas na tabela gestao_trilhas")
+        print(f"Colunas: {list(df.columns)}")
+        
+        df.to_sql('gestao_trilhas', conn, if_exists='replace', index=False)
+        conn.close()
+        
+        print("Dados salvos com sucesso na tabela gestao_trilhas")
+        return True
+    except Exception as e:
+        print(f"Erro ao salvar dados na tabela gestao_trilhas: {e}")
+        if 'conn' in locals():
+            conn.close()
+        return False
 
 def busca_gestao_trilhas():
     conn = sqlite3.connect(DB_FILE)
