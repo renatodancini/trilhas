@@ -174,13 +174,33 @@ if st.session_state.get('show_login', False) and not st.session_state['autentica
 # Impressão de Trilhas
 if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
     st.write('### Gestão das Trilhas')
-    df_trilhas_banco = busca_gestao_trilhas()
     
-    # Criar combobox com as trilhas
-    if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
-        # Buscar trilhas únicas com código
-        trilhas_unicas = df_trilhas_banco[['Código', 'Trilhas']].drop_duplicates().dropna(subset=['Trilhas'])
-        opcoes_combo = [f"{row['Código']} - {row['Trilhas']}" for _, row in trilhas_unicas.iterrows()]
+    # Buscar trilhas do database_2.db (apenas trilhas principais)
+    conn2 = sqlite3.connect('database_2.db')
+    try:
+        df_trilhas_controle = pd.read_sql_query('SELECT Trilhas FROM controle_trilhas', conn2)
+    except Exception:
+        df_trilhas_controle = pd.DataFrame(columns=['Trilhas'])
+    conn2.close()
+    
+    # Buscar códigos das trilhas do login_status.db
+    conn_gestao = sqlite3.connect('login_status.db')
+    try:
+        df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
+    except Exception:
+        df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
+    conn_gestao.close()
+    
+    # Mesclar para obter os códigos das trilhas principais
+    df_trilhas_completas = pd.merge(df_trilhas_controle, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
+    
+    # Criar combobox com as trilhas principais
+    if not df_trilhas_completas.empty:
+        opcoes_combo = []
+        for _, row in df_trilhas_completas.iterrows():
+            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] else ''
+            trilha = row['Trilhas']
+            opcoes_combo.append(f"{codigo} - {trilha}" if codigo else trilha)
         
         # Combobox para seleção de trilha
         trilha_selecionada = st.selectbox(
@@ -210,8 +230,8 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 )
     
-    # Exibir tabela completa com todos os dados
-    if df_trilhas_banco is not None and 'Trilhas' in df_trilhas_banco.columns:
+    # Exibir tabela completa com todos os dados (apenas trilhas principais)
+    if not df_trilhas_completas.empty:
         # Buscar dados diretamente do database_2.db
         conn2 = sqlite3.connect('database_2.db')
         try:
@@ -229,20 +249,6 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
         
         # Remover duplicatas da tabela controle_trilhas
         df_ctrl = df_ctrl.drop_duplicates(subset=['Trilhas'])
-        
-        # Formatar trilhas com código
-        df_ctrl['Trilha'] = df_ctrl['Trilhas'].apply(lambda x: x if pd.notnull(x) and x else '')
-        
-        # Buscar códigos das trilhas do login_status.db
-        conn_gestao = sqlite3.connect('login_status.db')
-        try:
-            df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
-        except Exception:
-            df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
-        conn_gestao.close()
-        
-        # Remover duplicatas da tabela gestao_trilhas
-        df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
         
         # Mesclar para obter os códigos
         df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
