@@ -308,14 +308,22 @@ def sincronizar_database2():
         conn_principal = sqlite3.connect(DB_FILE)
         conn_database2 = sqlite3.connect('database_2.db')
         
-        # Buscar dados da tabela gestao_trilhas do banco principal
-        df_gestao = pd.read_sql_query('SELECT DISTINCT Trilhas, Código FROM gestao_trilhas WHERE Trilhas IS NOT NULL AND Trilhas != ""', conn_principal)
+        # Buscar apenas as trilhas principais (sem atividade preenchida)
+        df_gestao = pd.read_sql_query('''
+            SELECT DISTINCT Trilhas, Código 
+            FROM gestao_trilhas 
+            WHERE Trilhas IS NOT NULL 
+            AND Trilhas != "" 
+            AND (Atividade IS NULL OR Atividade = "" OR Atividade = "Responsável")
+            AND Trilhas != "Massa de dados não informada"
+        ''', conn_principal)
         
-        print(f"Sincronizando {len(df_gestao)} trilhas para database_2.db")
+        print(f"Sincronizando {len(df_gestao)} trilhas principais para database_2.db")
         
         # Limpar tabela controle_trilhas no database_2.db
         c = conn_database2.cursor()
         c.execute('DELETE FROM controle_trilhas')
+        c.execute('DELETE FROM controle_execucao')
         
         # Inserir dados na tabela controle_trilhas
         for _, row in df_gestao.iterrows():
@@ -327,13 +335,11 @@ def sincronizar_database2():
                 VALUES (?, ?, ?, ?)
             ''', (trilha, 'Pendente', '', ''))
             
-            # Também inserir na tabela controle_execucao se não existir
-            c.execute('SELECT COUNT(*) FROM controle_execucao WHERE trilha = ?', (trilha,))
-            if c.fetchone()[0] == 0:
-                c.execute('''
-                    INSERT INTO controle_execucao (trilha, categoria, status, modificado_por, modificado_em) 
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (trilha, 0, 'Pendente', '', ''))
+            # Também inserir na tabela controle_execucao
+            c.execute('''
+                INSERT INTO controle_execucao (trilha, categoria, status, modificado_por, modificado_em) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', (trilha, 0, 'Pendente', '', ''))
         
         conn_database2.commit()
         conn_principal.close()
