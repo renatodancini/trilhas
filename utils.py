@@ -185,23 +185,99 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     # Buscar atividades da trilha no banco de dados
     conn = sqlite3.connect(DB_FILE)
     try:
-        # Buscar todas as atividades da trilha específica
+        # Buscar todas as atividades válidas da trilha específica (excluindo cabeçalhos e emails)
         df_atividades = pd.read_sql_query(
-            'SELECT Atividade, Responsável, Tipo, Observações FROM gestao_trilhas WHERE Trilhas = ? ORDER BY rowid', 
+            '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+               FROM gestao_trilhas 
+               WHERE Trilhas = ? 
+               AND Atividade IS NOT NULL 
+               AND Atividade != "Atividade" 
+               AND Atividade != "Responsável"
+               AND Atividade != ""
+               AND Atividade NOT LIKE "%@%"
+               AND LENGTH(Atividade) > 10
+               ORDER BY rowid''', 
             conn, 
             params=[nome_trilha]
         )
         
-        # Se não encontrou atividades, criar um DataFrame vazio com as colunas corretas
+        # Se não encontrou atividades, tentar buscar por correspondência parcial
         if df_atividades.empty:
-            df_atividades = pd.DataFrame(columns=['Atividade', 'Responsável', 'Tipo', 'Observações'])
-            print(f"Nenhuma atividade encontrada para a trilha: {nome_trilha}")
+            # Buscar trilhas que contenham o nome da trilha
+            df_atividades = pd.read_sql_query(
+                '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+                   FROM gestao_trilhas 
+                   WHERE Trilhas LIKE ? 
+                   AND Atividade IS NOT NULL 
+                   AND Atividade != "Atividade" 
+                   AND Atividade != "Responsável"
+                   AND Atividade != ""
+                   AND Atividade NOT LIKE "%@%"
+                   AND LENGTH(Atividade) > 10
+                   ORDER BY rowid''', 
+                conn, 
+                params=[f'%{nome_trilha}%']
+            )
+            
+            if df_atividades.empty:
+                # Se ainda não encontrou, buscar por código
+                if codigo_trilha:
+                    df_atividades = pd.read_sql_query(
+                        '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+                           FROM gestao_trilhas 
+                           WHERE Trilhas LIKE ? 
+                           AND Atividade IS NOT NULL 
+                           AND Atividade != "Atividade" 
+                           AND Atividade != "Responsável"
+                           AND Atividade != ""
+                           AND Atividade NOT LIKE "%@%"
+                           AND LENGTH(Atividade) > 10
+                           ORDER BY rowid''', 
+                        conn, 
+                        params=[f'%{codigo_trilha}%']
+                    )
+        
+        # Se não encontrou atividades, criar um template com atividades básicas
+        if df_atividades.empty:
+            # Criar template de atividades básicas
+            atividades_template = [
+                {
+                    'Atividade': '1. Análise inicial da trilha',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Análise',
+                    'Finalizado': 'Não',
+                    'Observações': 'Primeira etapa da trilha'
+                },
+                {
+                    'Atividade': '2. Execução das atividades principais',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Execução',
+                    'Finalizado': 'Não',
+                    'Observações': 'Atividades específicas da trilha'
+                },
+                {
+                    'Atividade': '3. Validação e testes',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Validação',
+                    'Finalizado': 'Não',
+                    'Observações': 'Verificação dos resultados'
+                },
+                {
+                    'Atividade': '4. Finalização e documentação',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Finalização',
+                    'Finalizado': 'Não',
+                    'Observações': 'Conclusão da trilha'
+                }
+            ]
+            df_atividades = pd.DataFrame(atividades_template)
+            print(f"Template de atividades criado para a trilha: {nome_trilha}")
         else:
             print(f"Encontradas {len(df_atividades)} atividades para a trilha: {nome_trilha}")
             
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
-        df_atividades = pd.DataFrame(columns=['Atividade', 'Responsável', 'Tipo', 'Observações'])
+        df_atividades = pd.DataFrame(columns=['Atividade', 'Responsável', 'Tipo', 'Finalizado', 'Observações'])
     finally:
         conn.close()
     
@@ -211,7 +287,7 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     # Salvar como XLSX com formatação
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         # Escrever o DataFrame primeiro para criar a worksheet
-        df_atividades.to_excel(writer, sheet_name='Trilha', startrow=2, index=False)
+        df_atividades.to_excel(writer, sheet_name='Trilha', startrow=3, index=False)
         
         # Agora podemos acessar a worksheet
         worksheet = writer.sheets['Trilha']
@@ -220,8 +296,12 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         # Título da trilha na primeira linha
         worksheet.write(0, 0, f"{codigo_trilha} - {nome_trilha}")
         
-        # Linha vazia na segunda linha
-        worksheet.write(1, 0, '')
+        # Data de geração na segunda linha
+        data_geracao = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        worksheet.write(1, 0, f"Gerado em: {data_geracao}")
+        
+        # Linha vazia na terceira linha
+        worksheet.write(2, 0, '')
         
         # Formatar o título da trilha (primeira linha)
         title_format = workbook.add_format({
@@ -251,18 +331,19 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         
         # Aplicar formatação ao cabeçalho
         for col_num, value in enumerate(df_atividades.columns.values):
-            worksheet.write(2, col_num, value, header_format)
+            worksheet.write(3, col_num, value, header_format)
         
         # Aplicar formatação às células de dados (atividades)
         for row_num in range(len(df_atividades)):
             for col_num in range(len(df_atividades.columns)):
-                worksheet.write(row_num + 3, col_num, df_atividades.iloc[row_num, col_num], data_format)
+                worksheet.write(row_num + 4, col_num, df_atividades.iloc[row_num, col_num], data_format)
         
         # Ajustar largura das colunas
         worksheet.set_column('A:A', 60)  # Atividades
         worksheet.set_column('B:B', 30)  # Responsável
         worksheet.set_column('C:C', 15)  # Tipo
-        worksheet.set_column('D:D', 20)  # Observações
+        worksheet.set_column('D:D', 15)  # Finalizado
+        worksheet.set_column('E:E', 20)  # Observações
     
     buffer.seek(0)
     return buffer.read() 
