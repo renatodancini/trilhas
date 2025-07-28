@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from utils import USERS_FILE, DB_FILE, cadastra_usuario, salva_impressao_upload, limpa_gestao_trilhas, salva_gestao_trilhas, busca_gestao_trilhas
+from utils import USERS_FILE, DB_FILE, cadastra_usuario, salva_impressao_upload, limpa_gestao_trilhas, salva_gestao_trilhas, busca_gestao_trilhas, sincronizar_database2
 
 def tela_configuracao():
     st.write("# Configurações")
@@ -75,18 +75,29 @@ def tela_configuracao():
                 st.experimental_rerun()
     with aba2:
         st.write("## Upload de dados")
-        if st.button('Deletar tabela de uploads'):
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute('DROP TABLE IF EXISTS impressao_upload')
-            c.execute('''CREATE TABLE IF NOT EXISTS impressao_upload (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                colunas TEXT,
-                dados TEXT
-            )''')
-            conn.commit()
-            conn.close()
-            st.success('Tabela de uploads deletada e recriada com sucesso!')
+        
+        # Botão para sincronizar database_2.db
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button('🔄 Sincronizar Database 2'):
+                if sincronizar_database2():
+                    st.success("Database 2 sincronizado com sucesso!")
+                else:
+                    st.error("Erro ao sincronizar database 2!")
+        
+        with col2:
+            if st.button('🗑️ Deletar tabela de uploads'):
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute('DROP TABLE IF EXISTS impressao_upload')
+                c.execute('''CREATE TABLE IF NOT EXISTS impressao_upload (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    colunas TEXT,
+                    dados TEXT
+                )''')
+                conn.commit()
+                conn.close()
+                st.success('Tabela de uploads deletada e recriada com sucesso!')
         arquivo = st.file_uploader("Selecione um arquivo para upload (CSV ou Excel)", type=["csv", "xlsx"])
         if arquivo is not None:
             import io
@@ -151,6 +162,12 @@ def tela_configuracao():
                 # Salvar dados de gestão
                 if salva_gestao_trilhas(df_trilhas):
                     st.success("Tabela de gestão de trilhas atualizada com sucesso!")
+                    
+                    # Sincronizar com database_2.db
+                    if sincronizar_database2():
+                        st.success("Database 2 sincronizado com sucesso!")
+                    else:
+                        st.warning("Erro ao sincronizar database 2!")
                 else:
                     st.error("Erro ao salvar tabela de gestão de trilhas!")
         st.write("### Tabela de Gestão de Trilhas")

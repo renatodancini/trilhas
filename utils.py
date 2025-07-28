@@ -298,3 +298,54 @@ def atualizar_status_download(nome_trilha, usuario_logado):
         print(f"Erro ao atualizar status: {e}")
     finally:
         conn.close() 
+
+def sincronizar_database2():
+    """
+    Sincroniza os dados do banco principal (login_status.db) para o database_2.db
+    """
+    try:
+        # Conectar aos dois bancos
+        conn_principal = sqlite3.connect(DB_FILE)
+        conn_database2 = sqlite3.connect('database_2.db')
+        
+        # Buscar dados da tabela gestao_trilhas do banco principal
+        df_gestao = pd.read_sql_query('SELECT DISTINCT Trilhas, Código FROM gestao_trilhas WHERE Trilhas IS NOT NULL AND Trilhas != ""', conn_principal)
+        
+        print(f"Sincronizando {len(df_gestao)} trilhas para database_2.db")
+        
+        # Limpar tabela controle_trilhas no database_2.db
+        c = conn_database2.cursor()
+        c.execute('DELETE FROM controle_trilhas')
+        
+        # Inserir dados na tabela controle_trilhas
+        for _, row in df_gestao.iterrows():
+            trilha = row['Trilhas']
+            codigo = row['Código'] if pd.notnull(row['Código']) else ''
+            
+            c.execute('''
+                INSERT INTO controle_trilhas (Trilhas, Status, "Modificado por", "Modificado em") 
+                VALUES (?, ?, ?, ?)
+            ''', (trilha, 'Pendente', '', ''))
+            
+            # Também inserir na tabela controle_execucao se não existir
+            c.execute('SELECT COUNT(*) FROM controle_execucao WHERE trilha = ?', (trilha,))
+            if c.fetchone()[0] == 0:
+                c.execute('''
+                    INSERT INTO controle_execucao (trilha, categoria, status, modificado_por, modificado_em) 
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (trilha, 0, 'Pendente', '', ''))
+        
+        conn_database2.commit()
+        conn_principal.close()
+        conn_database2.close()
+        
+        print("✅ Sincronização concluída com sucesso!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Erro na sincronização: {e}")
+        if 'conn_principal' in locals():
+            conn_principal.close()
+        if 'conn_database2' in locals():
+            conn_database2.close()
+        return False 
