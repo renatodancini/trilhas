@@ -13,7 +13,7 @@ def tela_registre_se():
             
             # Seção de categorias
             st.markdown("### 📂 Seleção de Categorias")
-            st.info("Selecione as categorias de trilhas que você deseja acessar. As categorias são baseadas nas 3 primeiras letras dos nomes das trilhas.")
+            st.info("Selecione as categorias de trilhas que você deseja acessar. As categorias são baseadas nos códigos das trilhas (ex: CMR, ORG, SUP, ADM, etc.).")
             
             # Obter categorias disponíveis
             categorias_disponiveis = obter_categorias_disponiveis()

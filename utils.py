@@ -91,7 +91,7 @@ def cadastra_usuario(nome, email, senha, tipo, categorias='[]'):
     return True
 
 def obter_categorias_disponiveis():
-    """Obtém todas as categorias disponíveis baseadas nas 3 primeiras letras das trilhas"""
+    """Obtém todas as categorias disponíveis baseadas nas 3 primeiras letras dos códigos das trilhas"""
     try:
         import sqlite3
         conn = sqlite3.connect('database_trilhas.db')
@@ -101,12 +101,22 @@ def obter_categorias_disponiveis():
         if df.empty:
             return []
         
-        # Extrair as 3 primeiras letras de cada trilha
+        # Extrair as 3 primeiras letras dos códigos das trilhas
         categorias = set()
         for trilha in df['Trilhas']:
             if trilha and len(trilha) >= 3:
-                categoria = trilha[:3].upper()
-                categorias.add(categoria)
+                # Tentar extrair código da trilha (ex: CMR205.1, ORG123, SUP456)
+                import re
+                # Padrão para códigos de trilha: 3 letras seguidas de números
+                padrao = r'^([A-Z]{3})\d+'
+                match = re.search(padrao, str(trilha).upper())
+                if match:
+                    categoria = match.group(1)  # Extrai as 3 letras do código
+                    categorias.add(categoria)
+                else:
+                    # Fallback: usar as 3 primeiras letras se não encontrar padrão
+                    categoria = trilha[:3].upper()
+                    categorias.add(categoria)
         
         return sorted(list(categorias))
     except Exception as e:
@@ -132,8 +142,24 @@ def filtrar_trilhas_por_categoria(df_trilhas, categorias_usuario):
     if not categorias_usuario:
         return df_trilhas  # Se não há categorias definidas, mostrar todas
     
-    # Filtrar trilhas que começam com as categorias do usuário
-    df_filtrado = df_trilhas[df_trilhas['Trilhas'].str[:3].str.upper().isin(categorias_usuario)]
+    # Filtrar trilhas que começam com os códigos das categorias do usuário
+    def extrair_codigo_categoria(trilha):
+        if not trilha or len(trilha) < 3:
+            return None
+        import re
+        # Padrão para códigos de trilha: 3 letras seguidas de números
+        padrao = r'^([A-Z]{3})\d+'
+        match = re.search(padrao, str(trilha).upper())
+        if match:
+            return match.group(1)  # Retorna as 3 letras do código
+        else:
+            # Fallback: usar as 3 primeiras letras
+            return trilha[:3].upper()
+    
+    # Aplicar filtro baseado nos códigos das categorias
+    df_filtrado = df_trilhas[df_trilhas['Trilhas'].apply(
+        lambda x: extrair_codigo_categoria(x) in categorias_usuario
+    )]
     return df_filtrado
 
 def salva_impressao_upload(df):
