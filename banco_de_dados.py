@@ -20,6 +20,7 @@ def inicializar_banco():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS trilhas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Trilhas TEXT,
                 Atividades TEXT NOT NULL,
                 Responsável TEXT,
                 Tipo TEXT,
@@ -30,6 +31,25 @@ def inicializar_banco():
         conn.commit()
         conn.close()
         st.success("Banco de dados inicializado com sucesso!")
+    else:
+        # Verificar se a coluna Trilhas existe, se não, adicionar
+        conn = sqlite3.connect(DB_TRILHAS_FILE)
+        cursor = conn.cursor()
+        
+        # Verificar estrutura atual da tabela
+        cursor.execute("PRAGMA table_info(trilhas)")
+        colunas_existentes = [col[1] for col in cursor.fetchall()]
+        
+        # Se a coluna Trilhas não existe, adicionar
+        if 'Trilhas' not in colunas_existentes:
+            try:
+                cursor.execute("ALTER TABLE trilhas ADD COLUMN Trilhas TEXT")
+                conn.commit()
+                st.success("✅ Coluna 'Trilhas' adicionada ao banco de dados!")
+            except Exception as e:
+                st.warning(f"⚠️ Aviso: {e}")
+        
+        conn.close()
 
 def carregar_dados_excel(arquivo):
     """Carrega dados de um arquivo Excel"""
@@ -43,13 +63,18 @@ def carregar_dados_excel(arquivo):
             return None
         
         # Verificar se as colunas necessárias existem
-        colunas_necessarias = ['Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações']
+        colunas_necessarias = ['Trilhas', 'Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações']
         colunas_faltantes = [col for col in colunas_necessarias if col not in df.columns]
         
         if colunas_faltantes:
             st.error(f"Colunas faltantes no arquivo: {colunas_faltantes}")
-            st.info("As colunas necessárias são: Atividades, Responsável, Tipo, Finalizado, Observações")
+            st.info("As colunas necessárias são: Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações")
             return None
+        
+        # Garantir que a coluna Trilhas esteja presente
+        if 'Trilhas' not in df.columns:
+            st.warning("⚠️ Coluna 'Trilhas' não encontrada. Será criada com valores vazios.")
+            df['Trilhas'] = ''
         
         return df
     
@@ -181,7 +206,7 @@ def tela_banco_dados():
         - Esta operação não pode ser desfeita
         """)
         
-        st.info("Faça upload de uma planilha Excel com as colunas: Atividades, Responsável, Tipo, Finalizado, Observações")
+        st.info("Faça upload de uma planilha Excel com as colunas: Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações")
         
         # Mostrar informações do banco atual
         df_banco_atual = buscar_dados_banco()
@@ -192,7 +217,7 @@ def tela_banco_dados():
         arquivo = st.file_uploader(
             "Selecione um arquivo Excel ou CSV",
             type=["xlsx", "csv"],
-            help="O arquivo deve conter as colunas: Atividades, Responsável, Tipo, Finalizado, Observações"
+            help="O arquivo deve conter as colunas: Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações"
         )
         
         if arquivo is not None:
@@ -261,15 +286,21 @@ def tela_banco_dados():
             
             # Filtros
             st.subheader("🔍 Filtros")
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             
             with col1:
+                filtro_trilhas = st.selectbox(
+                    "Filtrar por Trilhas:",
+                    options=["Todas"] + list(df_banco['Trilhas'].unique()) if 'Trilhas' in df_banco.columns else ["Todas"]
+                )
+            
+            with col2:
                 filtro_tipo = st.selectbox(
                     "Filtrar por Tipo:",
                     options=["Todos"] + list(df_banco['Tipo'].unique()) if 'Tipo' in df_banco.columns else ["Todos"]
                 )
             
-            with col2:
+            with col3:
                 filtro_finalizado = st.selectbox(
                     "Filtrar por Status:",
                     options=["Todos"] + list(df_banco['Finalizado'].unique()) if 'Finalizado' in df_banco.columns else ["Todos"]
@@ -277,6 +308,9 @@ def tela_banco_dados():
             
             # Aplicar filtros
             df_filtrado = df_banco.copy()
+            
+            if filtro_trilhas != "Todas":
+                df_filtrado = df_filtrado[df_filtrado['Trilhas'] == filtro_trilhas]
             
             if filtro_tipo != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['Tipo'] == filtro_tipo]
@@ -291,23 +325,30 @@ def tela_banco_dados():
             
             # Estatísticas
             st.subheader("📊 Estatísticas")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
+                if 'Trilhas' in df_banco.columns:
+                    st.write("**Por Trilhas:**")
+                    trilhas_counts = df_banco['Trilhas'].value_counts().head(5)
+                    for trilha, count in trilhas_counts.items():
+                        st.write(f"  • {trilha}: {count}")
+            
+            with col2:
                 if 'Tipo' in df_banco.columns:
                     st.write("**Por Tipo:**")
                     tipo_counts = df_banco['Tipo'].value_counts()
                     for tipo, count in tipo_counts.items():
                         st.write(f"  • {tipo}: {count}")
             
-            with col2:
+            with col3:
                 if 'Finalizado' in df_banco.columns:
                     st.write("**Por Status:**")
                     finalizado_counts = df_banco['Finalizado'].value_counts()
                     for status, count in finalizado_counts.items():
                         st.write(f"  • {status}: {count}")
             
-            with col3:
+            with col4:
                 if 'Responsável' in df_banco.columns:
                     st.write("**Por Responsável:**")
                     responsavel_counts = df_banco['Responsável'].value_counts().head(5)
@@ -376,6 +417,11 @@ def tela_banco_dados():
         st.info("Use este template como base para sua planilha:")
         
         template_data = {
+            'Trilhas': [
+                'Trilha de Crédito CMR248.1',
+                'Trilha de Crédito CMR248.1',
+                'Trilha de Crédito CMR248.1'
+            ],
             'Atividades': [
                 'CMR248.1 - BPH004197 - 43. Administrar deferimentos de crédito documentado',
                 'CMR248.1 - BPH004198 - 44. Validar documentação',
