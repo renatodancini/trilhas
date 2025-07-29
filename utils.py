@@ -614,6 +614,22 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
             
             # Aplicar formatação às atividades
             df_atividades['Atividades'] = df_atividades.apply(formatar_atividade, axis=1)
+            
+            # Função para extrair número BPH para ordenação
+            def extrair_numero_bph(atividade):
+                import re
+                # Procurar por BPH seguido de números
+                match = re.search(r'BPH(\d+)', atividade)
+                if match:
+                    return int(match.group(1))
+                return 0  # Se não encontrar BPH, colocar no início
+            
+            # Ordenar as atividades pelo número BPH
+            df_atividades['numero_bph'] = df_atividades['Atividades'].apply(extrair_numero_bph)
+            df_atividades = df_atividades.sort_values('numero_bph')
+            df_atividades = df_atividades.drop('numero_bph', axis=1)
+            
+            print(f"Atividades ordenadas numericamente pelo número BPH")
         
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
