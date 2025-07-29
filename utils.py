@@ -624,23 +624,31 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
                     return int(match.group(1))
                 return 0  # Se não encontrar BPH, colocar no início
             
-            # Função para extrair código BPH completo
-            def extrair_codigo_bph(atividade):
+            # Função para extrair número sequencial da atividade
+            def extrair_numero_sequencial(atividade):
                 import re
-                # Procurar por BPH seguido de números
-                match = re.search(r'BPH(\d+)', atividade)
+                # Procurar pelo número após o segundo "-" (formato: X. Descrição)
+                # Exemplo: "CMR205.1 - BPH003890 - 1. Aprovar contrato" -> extrair "1"
+                match = re.search(r'-\s*(\d+)\.', atividade)
                 if match:
-                    return f"BPH{match.group(1)}"
-                return "Sem BPH"
+                    return int(match.group(1))
+                return 0  # Se não encontrar número sequencial, colocar no início
             
-            # Adicionar coluna para agrupamento por BPH
-            df_atividades['codigo_bph'] = df_atividades['Atividades'].apply(extrair_codigo_bph)
-            df_atividades['numero_bph'] = df_atividades['Atividades'].apply(extrair_numero_bph)
+            # Função para extrair categoria baseada no número sequencial
+            def extrair_categoria_sequencial(atividade):
+                numero = extrair_numero_sequencial(atividade)
+                if numero > 0:
+                    return f"Categoria {numero}"
+                return "Sem Categoria"
             
-            # Ordenar por código BPH e depois por número BPH
-            df_atividades = df_atividades.sort_values(['codigo_bph', 'numero_bph'])
+            # Adicionar coluna para agrupamento por número sequencial
+            df_atividades['categoria_sequencial'] = df_atividades['Atividades'].apply(extrair_categoria_sequencial)
+            df_atividades['numero_sequencial'] = df_atividades['Atividades'].apply(extrair_numero_sequencial)
             
-            print(f"Atividades agrupadas e ordenadas por código BPH")
+            # Ordenar por número sequencial
+            df_atividades = df_atividades.sort_values('numero_sequencial')
+            
+            print(f"Atividades categorizadas e ordenadas por número sequencial")
         
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
@@ -707,16 +715,16 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
             'valign': 'top'
         })
         
-        # Demais linhas: Dados das atividades agrupadas por BPH
+        # Demais linhas: Dados das atividades agrupadas por número sequencial
         linha_atual = 3
         
-        # Agrupar atividades por código BPH
-        grupos_bph = df_atividades.groupby('codigo_bph')
+        # Agrupar atividades por categoria sequencial
+        grupos_sequencial = df_atividades.groupby('categoria_sequencial')
         
-        for codigo_bph, grupo in grupos_bph:
-            # Escrever cabeçalho da categoria BPH
-            if codigo_bph != "Sem BPH":
-                categoria_titulo = f"CATEGORIA: {codigo_bph}"
+        for categoria, grupo in grupos_sequencial:
+            # Escrever cabeçalho da categoria
+            if categoria != "Sem Categoria":
+                categoria_titulo = f"CATEGORIA: {categoria}"
                 worksheet.write(linha_atual, 0, categoria_titulo, categoria_format)
                 # Mesclar células para o cabeçalho da categoria
                 worksheet.merge_range(linha_atual, 0, linha_atual, 4, categoria_titulo, categoria_format)
@@ -730,7 +738,7 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
                 linha_atual += 1
             
             # Adicionar linha em branco entre categorias (exceto na última)
-            if codigo_bph != list(grupos_bph.groups.keys())[-1]:
+            if categoria != list(grupos_sequencial.groups.keys())[-1]:
                 linha_atual += 1
         
         # Ajustar largura das colunas
@@ -744,12 +752,12 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         # Definir altura das linhas de dados e cabeçalhos de categoria
         linha_atual = 2  # Começar da linha dos cabeçalhos
         
-        # Agrupar atividades por código BPH para definir alturas
-        grupos_bph = df_atividades.groupby('codigo_bph')
+        # Agrupar atividades por categoria sequencial para definir alturas
+        grupos_sequencial = df_atividades.groupby('categoria_sequencial')
         
-        for codigo_bph, grupo in grupos_bph:
+        for categoria, grupo in grupos_sequencial:
             # Definir altura do cabeçalho da categoria
-            if codigo_bph != "Sem BPH":
+            if categoria != "Sem Categoria":
                 worksheet.set_row(linha_atual, 18)  # Altura para cabeçalhos de categoria
                 linha_atual += 1
             
@@ -759,7 +767,7 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
                 linha_atual += 1
             
             # Adicionar linha em branco entre categorias (exceto na última)
-            if codigo_bph != list(grupos_bph.groups.keys())[-1]:
+            if categoria != list(grupos_sequencial.groups.keys())[-1]:
                 linha_atual += 1
     
     buffer.seek(0)
