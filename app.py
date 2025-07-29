@@ -9,8 +9,15 @@ def inicializa_session_state():
         st.session_state['autenticado'] = False
     if 'usuario' not in st.session_state:
         st.session_state['usuario'] = ''
+    if 'email_usuario' not in st.session_state:
+        st.session_state['email_usuario'] = ''
+    if 'tipo_usuario' not in st.session_state:
+        st.session_state['tipo_usuario'] = ''
     if 'show_login' not in st.session_state:
         st.session_state['show_login'] = False
+    if 'session_id' not in st.session_state:
+        st.session_state['session_id'] = None
+
 inicializa_session_state()
 
 # Diagnóstico: Exibe o session_state no topo da tela para depuração
@@ -27,16 +34,17 @@ from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
     salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
-    gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, registrar_download_trilha, buscar_controle_downloads, atualizar_status_download
+    gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, registrar_download_trilha, buscar_controle_downloads, atualizar_status_download,
+    verificar_sessao_ativa, limpar_sessao_compartilhada
 )
 
-# Ao iniciar, tenta restaurar login
-if not st.session_state['autenticado']:
-    login_info = busca_login_status()
-    if login_info:
-        st.session_state['autenticado'] = True
-        st.session_state['usuario'] = login_info['nome']
-        st.session_state['tipo'] = login_info['tipo']
+# Verificar se há sessão compartilhada ativa e limpar se necessário
+# Isso garante que cada usuário tenha sua própria sessão
+if verificar_sessao_ativa() and not st.session_state['autenticado']:
+    limpar_sessao_compartilhada()
+
+# Não restaurar login do banco - cada usuário deve fazer login individualmente
+# Isso garante que cada sessão seja individual por usuário
 
 # Função para aplicar estilo customizado ao menu lateral
 def estilo_menu_lateral():
@@ -98,11 +106,19 @@ with header_btn_col:
         if st.button("Login", key="header_login_btn", help="Clique para logar", use_container_width=True):
             st.session_state['show_login'] = True
     else:
-        if st.button("Logout", key="header_logoff_btn", help="Clique para sair", use_container_width=True):
+        if st.button("Logout", key="header_logout_btn", help="Clique para sair", use_container_width=True):
+            # Limpar sessão individual
             st.session_state['autenticado'] = False
             st.session_state['usuario'] = ''
-            remove_login_status()  # Remove do banco
-            st.success('Logout realizado com sucesso!')
+            st.session_state['email_usuario'] = ''
+            st.session_state['tipo_usuario'] = ''
+            st.session_state['session_id'] = None
+            st.session_state['show_login'] = False
+            
+            # Limpar sessão compartilhada no banco (para compatibilidade)
+            limpar_sessao_compartilhada()
+            
+            st.success("Logout realizado com sucesso!")
             try:
                 st.rerun()
             except AttributeError:
@@ -133,7 +149,10 @@ with st.sidebar:
                 opcoes_menu.append("Controle de Trilhas")
                 opcoes_menu.append("Configuração")
         except Exception:
-            pass
+            # Usar tipo armazenado na sessão como fallback
+            if st.session_state.get('tipo_usuario') == 'admin':
+                opcoes_menu.append("Controle de Trilhas")
+                opcoes_menu.append("Configuração")
     else:
         # Menu para usuários não logados
         opcoes_menu.append("Login")
@@ -159,11 +178,17 @@ if (st.session_state.get('show_login', False) and not st.session_state['autentic
         if st.button("Entrar", key="btn_main_entrar"):
             ok, nome, tipo = autentica_usuario(usuario, senha)
             if ok:
+                # Configurar sessão individual do usuário
                 st.session_state['autenticado'] = True
                 st.session_state['usuario'] = nome
-                st.session_state['tipo'] = tipo
-                salva_login_status(usuario, nome, tipo) # Salva status no banco
+                st.session_state['email_usuario'] = usuario
+                st.session_state['tipo_usuario'] = tipo
+                st.session_state['session_id'] = f"{usuario}_{nome}_{tipo}"
                 st.session_state['show_login'] = False
+                
+                # Limpar sessão compartilhada no banco (para compatibilidade)
+                limpar_sessao_compartilhada()
+                
                 st.success(f"Bem-vindo, {nome}!")
                 try:
                     st.rerun()
@@ -307,11 +332,22 @@ elif pagina == "Configuração" and not st.session_state.get('show_login', False
     if not st.session_state['autenticado']:
         st.warning("Faça login para acessar a página de configuração.")
         st.stop()
+    
+    # Verificar se é administrador
+    if st.session_state.get('tipo_usuario') != 'admin':
+        st.error("Acesso negado. Apenas administradores podem acessar esta página.")
+        st.stop()
+    
     tela_configuracao()
 # Controle de Trilhas
 elif pagina == "Controle de Trilhas" and not st.session_state.get('show_login', False):
     if not st.session_state['autenticado']:
         st.warning("Faça login para acessar o controle de trilhas.")
+        st.stop()
+    
+    # Verificar se é administrador
+    if st.session_state.get('tipo_usuario') != 'admin':
+        st.error("Acesso negado. Apenas administradores podem acessar esta página.")
         st.stop()
     
     st.title('Controle de Execução das Trilhas')

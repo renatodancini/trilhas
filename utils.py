@@ -22,6 +22,7 @@ def inicializa_db():
     conn.close()
 
 def salva_login_status(email, nome, tipo):
+    """Salva o status de login no banco de dados (mantido para compatibilidade)"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('DELETE FROM login_status')
@@ -30,6 +31,7 @@ def salva_login_status(email, nome, tipo):
     conn.close()
 
 def busca_login_status():
+    """Busca o status de login no banco de dados (mantido para compatibilidade)"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('SELECT email, nome, tipo FROM login_status LIMIT 1')
@@ -40,11 +42,21 @@ def busca_login_status():
     return None
 
 def remove_login_status():
+    """Remove o status de login do banco de dados"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('DELETE FROM login_status')
     conn.commit()
     conn.close()
+
+def verificar_sessao_ativa():
+    """Verifica se há uma sessão ativa no banco de dados (para compatibilidade)"""
+    login_info = busca_login_status()
+    return login_info is not None
+
+def limpar_sessao_compartilhada():
+    """Limpa a sessão compartilhada no banco de dados"""
+    remove_login_status()
 
 def inicializa_usuarios():
     try:
