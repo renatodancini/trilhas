@@ -624,12 +624,23 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
                     return int(match.group(1))
                 return 0  # Se não encontrar BPH, colocar no início
             
-            # Ordenar as atividades pelo número BPH
-            df_atividades['numero_bph'] = df_atividades['Atividades'].apply(extrair_numero_bph)
-            df_atividades = df_atividades.sort_values('numero_bph')
-            df_atividades = df_atividades.drop('numero_bph', axis=1)
+            # Função para extrair código BPH completo
+            def extrair_codigo_bph(atividade):
+                import re
+                # Procurar por BPH seguido de números
+                match = re.search(r'BPH(\d+)', atividade)
+                if match:
+                    return f"BPH{match.group(1)}"
+                return "Sem BPH"
             
-            print(f"Atividades ordenadas numericamente pelo número BPH")
+            # Adicionar coluna para agrupamento por BPH
+            df_atividades['codigo_bph'] = df_atividades['Atividades'].apply(extrair_codigo_bph)
+            df_atividades['numero_bph'] = df_atividades['Atividades'].apply(extrair_numero_bph)
+            
+            # Ordenar por código BPH e depois por número BPH
+            df_atividades = df_atividades.sort_values(['codigo_bph', 'numero_bph'])
+            
+            print(f"Atividades agrupadas e ordenadas por código BPH")
         
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
@@ -686,11 +697,41 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         for col_num, coluna in enumerate(colunas):
             worksheet.write(2, col_num, coluna, header_format)
         
-        # Demais linhas: Dados das atividades
-        for row_num, (_, row) in enumerate(df_atividades.iterrows(), start=3):
-            for col_num, coluna in enumerate(colunas):
-                valor = row[coluna] if pd.notnull(row[coluna]) else ''
-                worksheet.write(row_num, col_num, valor, cell_format)
+        # Definir formato para cabeçalhos de categoria
+        categoria_format = workbook.add_format({
+            'bold': True,
+            'font_size': 12,
+            'fg_color': '#E6F3FF',
+            'border': 1,
+            'align': 'left',
+            'valign': 'top'
+        })
+        
+        # Demais linhas: Dados das atividades agrupadas por BPH
+        linha_atual = 3
+        
+        # Agrupar atividades por código BPH
+        grupos_bph = df_atividades.groupby('codigo_bph')
+        
+        for codigo_bph, grupo in grupos_bph:
+            # Escrever cabeçalho da categoria BPH
+            if codigo_bph != "Sem BPH":
+                categoria_titulo = f"CATEGORIA: {codigo_bph}"
+                worksheet.write(linha_atual, 0, categoria_titulo, categoria_format)
+                # Mesclar células para o cabeçalho da categoria
+                worksheet.merge_range(linha_atual, 0, linha_atual, 4, categoria_titulo, categoria_format)
+                linha_atual += 1
+            
+            # Escrever atividades da categoria
+            for _, row in grupo.iterrows():
+                for col_num, coluna in enumerate(colunas):
+                    valor = row[coluna] if pd.notnull(row[coluna]) else ''
+                    worksheet.write(linha_atual, col_num, valor, cell_format)
+                linha_atual += 1
+            
+            # Adicionar linha em branco entre categorias (exceto na última)
+            if codigo_bph != list(grupos_bph.groups.keys())[-1]:
+                linha_atual += 1
         
         # Ajustar largura das colunas
         larguras_colunas = [50, 20, 15, 15, 30]  # Atividades, Responsável, Tipo, Finalizado, Observações
@@ -700,9 +741,17 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         # Definir altura da linha do título
         worksheet.set_row(0, 25)
         
-        # Definir altura das linhas de dados
-        for row_num in range(3, len(df_atividades) + 3):
-            worksheet.set_row(row_num, 20)
+        # Definir altura das linhas de dados e cabeçalhos de categoria
+        for row_num in range(2, linha_atual):
+            if row_num == 2:  # Cabeçalhos das colunas
+                worksheet.set_row(row_num, 20)
+            else:
+                # Verificar se é linha de categoria
+                categoria_value = worksheet.read(row_num, 0)
+                if isinstance(categoria_value, str) and categoria_value.startswith('CATEGORIA:'):
+                    worksheet.set_row(row_num, 18)  # Altura para cabeçalhos de categoria
+                else:
+                    worksheet.set_row(row_num, 20)  # Altura para linhas de dados
     
     buffer.seek(0)
     return buffer.read() 
