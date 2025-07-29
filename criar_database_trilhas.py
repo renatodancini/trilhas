@@ -29,6 +29,7 @@ def criar_database_trilhas():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS trilhas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Trilhas TEXT,
                 Atividades TEXT NOT NULL,
                 Responsável TEXT,
                 Tipo TEXT,
