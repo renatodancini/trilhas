@@ -119,26 +119,29 @@ with header_btn_col:
 # Menu lateral
 with st.sidebar:
     opcoes_menu = []
-    # Só mostra Impressão de Trilhas e Configuração para usuários logados
+    # Menu para usuários logados
     if st.session_state['autenticado']:
         opcoes_menu.append("Impressão de Trilhas")
         opcoes_menu.append("Perfil")
-        opcoes_menu.append("Controle de Trilhas")
         opcoes_menu.append("Banco de Dados")
+        
         # Descobre tipo do usuário logado
         try:
             df_usuarios = pd.read_csv(USERS_FILE)
             tipo_usuario = df_usuarios[df_usuarios['nome'] == st.session_state['usuario']]['tipo'].values
             if len(tipo_usuario) > 0 and tipo_usuario[0] == 'admin':
+                opcoes_menu.append("Controle de Trilhas")
                 opcoes_menu.append("Configuração")
         except Exception:
             pass
     else:
+        # Menu para usuários não logados
+        opcoes_menu.append("Login")
         opcoes_menu.append("Registre-se")
     
     # Se não há opções no menu, adicionar uma opção padrão
     if not opcoes_menu:
-        opcoes_menu.append("Registre-se")
+        opcoes_menu.append("Login")
     
     pagina = st.radio("", opcoes_menu)
     st.markdown('<div class="sidebar-footer"></div>', unsafe_allow_html=True)
@@ -147,7 +150,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # Tela de login
-if st.session_state.get('show_login', False) and not st.session_state['autenticado']:
+if (st.session_state.get('show_login', False) and not st.session_state['autenticado']) or (pagina == "Login" and not st.session_state['autenticado']):
     col_login1, col_login2, col_login3 = st.columns([2.75,2.5,2.75])
     with col_login2:
         st.markdown('<h2 style="text-align:center; margin-bottom: 20px;">Login</h2>', unsafe_allow_html=True)
