@@ -634,21 +634,16 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
                     return int(match.group(1))
                 return 0  # Se não encontrar número sequencial, colocar no início
             
-            # Função para extrair categoria baseada no número sequencial
-            def extrair_categoria_sequencial(atividade):
-                numero = extrair_numero_sequencial(atividade)
-                if numero > 0:
-                    return f"Categoria {numero}"
-                return "Sem Categoria"
-            
-            # Adicionar coluna para agrupamento por número sequencial
-            df_atividades['categoria_sequencial'] = df_atividades['Atividades'].apply(extrair_categoria_sequencial)
+            # Adicionar coluna para ordenação por número sequencial
             df_atividades['numero_sequencial'] = df_atividades['Atividades'].apply(extrair_numero_sequencial)
             
-            # Ordenar por número sequencial
+            # Ordenar por número sequencial (do menor para o maior)
             df_atividades = df_atividades.sort_values('numero_sequencial')
             
-            print(f"Atividades categorizadas e ordenadas por número sequencial")
+            # Remover coluna auxiliar
+            df_atividades = df_atividades.drop('numero_sequencial', axis=1)
+            
+            print(f"Atividades ordenadas numericamente do menor para o maior")
         
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
@@ -705,41 +700,15 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         for col_num, coluna in enumerate(colunas):
             worksheet.write(2, col_num, coluna, header_format)
         
-        # Definir formato para cabeçalhos de categoria
-        categoria_format = workbook.add_format({
-            'bold': True,
-            'font_size': 12,
-            'fg_color': '#E6F3FF',
-            'border': 1,
-            'align': 'left',
-            'valign': 'top'
-        })
-        
-        # Demais linhas: Dados das atividades agrupadas por número sequencial
+        # Demais linhas: Dados das atividades ordenadas
         linha_atual = 3
         
-        # Agrupar atividades por categoria sequencial
-        grupos_sequencial = df_atividades.groupby('categoria_sequencial')
-        
-        for categoria, grupo in grupos_sequencial:
-            # Escrever cabeçalho da categoria
-            if categoria != "Sem Categoria":
-                categoria_titulo = f"CATEGORIA: {categoria}"
-                worksheet.write(linha_atual, 0, categoria_titulo, categoria_format)
-                # Mesclar células para o cabeçalho da categoria
-                worksheet.merge_range(linha_atual, 0, linha_atual, 4, categoria_titulo, categoria_format)
-                linha_atual += 1
-            
-            # Escrever atividades da categoria
-            for _, row in grupo.iterrows():
-                for col_num, coluna in enumerate(colunas):
-                    valor = row[coluna] if pd.notnull(row[coluna]) else ''
-                    worksheet.write(linha_atual, col_num, valor, cell_format)
-                linha_atual += 1
-            
-            # Adicionar linha em branco entre categorias (exceto na última)
-            if categoria != list(grupos_sequencial.groups.keys())[-1]:
-                linha_atual += 1
+        # Escrever todas as atividades ordenadas
+        for _, row in df_atividades.iterrows():
+            for col_num, coluna in enumerate(colunas):
+                valor = row[coluna] if pd.notnull(row[coluna]) else ''
+                worksheet.write(linha_atual, col_num, valor, cell_format)
+            linha_atual += 1
         
         # Ajustar largura das colunas
         larguras_colunas = [50, 20, 15, 15, 30]  # Atividades, Responsável, Tipo, Finalizado, Observações
@@ -749,26 +718,12 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         # Definir altura da linha do título
         worksheet.set_row(0, 25)
         
-        # Definir altura das linhas de dados e cabeçalhos de categoria
-        linha_atual = 2  # Começar da linha dos cabeçalhos
-        
-        # Agrupar atividades por categoria sequencial para definir alturas
-        grupos_sequencial = df_atividades.groupby('categoria_sequencial')
-        
-        for categoria, grupo in grupos_sequencial:
-            # Definir altura do cabeçalho da categoria
-            if categoria != "Sem Categoria":
-                worksheet.set_row(linha_atual, 18)  # Altura para cabeçalhos de categoria
-                linha_atual += 1
-            
-            # Definir altura das linhas de dados da categoria
-            for _ in range(len(grupo)):
-                worksheet.set_row(linha_atual, 20)  # Altura para linhas de dados
-                linha_atual += 1
-            
-            # Adicionar linha em branco entre categorias (exceto na última)
-            if categoria != list(grupos_sequencial.groups.keys())[-1]:
-                linha_atual += 1
+        # Definir altura das linhas de dados
+        for row_num in range(2, linha_atual):
+            if row_num == 2:  # Cabeçalhos das colunas
+                worksheet.set_row(row_num, 20)
+            else:  # Linhas de dados
+                worksheet.set_row(row_num, 20)
     
     buffer.seek(0)
     return buffer.read() 
