@@ -57,10 +57,48 @@ def carregar_dados_excel(arquivo):
         st.error(f"Erro ao carregar arquivo: {e}")
         return None
 
+def fazer_backup_banco():
+    """Faz backup dos dados atuais do banco"""
+    try:
+        conn = sqlite3.connect(DB_TRILHAS_FILE)
+        df_backup = pd.read_sql_query("SELECT * FROM trilhas ORDER BY id", conn)
+        conn.close()
+        
+        if not df_backup.empty:
+            # Criar nome do arquivo com timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            nome_arquivo = f"backup_banco_{timestamp}.xlsx"
+            
+            # Salvar backup
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                df_backup.to_excel(writer, sheet_name='Backup', index=False)
+            buffer.seek(0)
+            
+            return buffer.read(), nome_arquivo
+        else:
+            return None, None
+            
+    except Exception as e:
+        st.error(f"❌ Erro ao fazer backup: {e}")
+        return None, None
+
 def salvar_dados_banco(df):
     """Salva dados do DataFrame no banco de dados"""
     try:
         conn = sqlite3.connect(DB_TRILHAS_FILE)
+        
+        # Verificar quantos registros existem atualmente
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM trilhas")
+        registros_atuais = cursor.fetchone()[0]
+        
+        # Fazer backup se existem dados
+        backup_data = None
+        backup_filename = None
+        if registros_atuais > 0:
+            backup_data, backup_filename = fazer_backup_banco()
         
         # Limpar dados existentes
         conn.execute("DELETE FROM trilhas")
@@ -71,11 +109,28 @@ def salvar_dados_banco(df):
         conn.commit()
         conn.close()
         
-        st.success(f"Dados salvos com sucesso! {len(df)} registros inseridos.")
+        # Mensagem detalhada sobre a operação
+        if registros_atuais > 0:
+            st.success(f"✅ Banco de dados atualizado com sucesso!")
+            st.info(f"📊 {registros_atuais} registros antigos foram removidos")
+            st.success(f"📈 {len(df)} novos registros foram inseridos")
+            
+            # Oferecer download do backup
+            if backup_data and backup_filename:
+                st.warning("💾 Backup dos dados antigos disponível:")
+                st.download_button(
+                    label=f"📥 Download Backup: {backup_filename}",
+                    data=backup_data,
+                    file_name=backup_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.success(f"✅ Dados salvos com sucesso! {len(df)} registros inseridos.")
+        
         return True
     
     except Exception as e:
-        st.error(f"Erro ao salvar dados no banco: {e}")
+        st.error(f"❌ Erro ao salvar dados no banco: {e}")
         return False
 
 def buscar_dados_banco():
@@ -116,7 +171,22 @@ def tela_banco_dados():
     
     with aba1:
         st.header("📤 Upload de Planilha Excel")
+        
+        # Aviso importante sobre a regra de substituição
+        st.warning("""
+        ⚠️ **ATENÇÃO:** Cada novo upload substituirá completamente os dados existentes no banco!
+        
+        - Todos os dados atuais serão removidos
+        - Apenas os dados do novo arquivo ficarão no banco
+        - Esta operação não pode ser desfeita
+        """)
+        
         st.info("Faça upload de uma planilha Excel com as colunas: Atividades, Responsável, Tipo, Finalizado, Observações")
+        
+        # Mostrar informações do banco atual
+        df_banco_atual = buscar_dados_banco()
+        if not df_banco_atual.empty:
+            st.info(f"📊 Banco atual: {len(df_banco_atual)} registros existentes")
         
         # Upload de arquivo
         arquivo = st.file_uploader(
@@ -137,15 +207,25 @@ def tela_banco_dados():
                 st.write("**Prévia dos dados:**")
                 st.dataframe(df.head(10), use_container_width=True)
                 
-                st.write(f"**Total de registros:** {len(df)}")
+                st.write(f"**Total de registros no arquivo:** {len(df)}")
+                
+                # Comparação com dados atuais
+                if not df_banco_atual.empty:
+                    st.info(f"📊 **Comparação:** {len(df_banco_atual)} registros atuais → {len(df)} novos registros")
                 
                 # Botões de ação
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("💾 Salvar no Banco", type="primary"):
-                        if salvar_dados_banco(df):
-                            st.rerun()
+                    if st.button("💾 Salvar no Banco (Substituir)", type="primary"):
+                        # Confirmação adicional
+                        if st.session_state.get('confirmar_substituicao', False):
+                            if salvar_dados_banco(df):
+                                st.session_state['confirmar_substituicao'] = False
+                                st.rerun()
+                        else:
+                            st.session_state['confirmar_substituicao'] = True
+                            st.warning("⚠️ Clique novamente para confirmar a substituição dos dados!")
                 
                 with col2:
                     if st.button("📥 Download como CSV"):
@@ -260,7 +340,7 @@ def tela_banco_dados():
         # Ações de manutenção
         st.subheader("🔧 Ações de Manutenção")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             if st.button("🗑️ Limpar Banco", type="secondary"):
@@ -272,6 +352,20 @@ def tela_banco_dados():
                     st.warning("Clique novamente para confirmar a limpeza do banco!")
         
         with col2:
+            if st.button("💾 Fazer Backup", type="secondary"):
+                backup_data, backup_filename = fazer_backup_banco()
+                if backup_data and backup_filename:
+                    st.success("✅ Backup criado com sucesso!")
+                    st.download_button(
+                        label=f"📥 Download Backup: {backup_filename}",
+                        data=backup_data,
+                        file_name=backup_filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                else:
+                    st.warning("⚠️ Nenhum dado para fazer backup!")
+        
+        with col3:
             if st.button("🔄 Recarregar Dados"):
                 st.rerun()
         
