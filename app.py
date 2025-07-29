@@ -173,7 +173,7 @@ if (st.session_state.get('show_login', False) and not st.session_state['autentic
     col_login1, col_login2, col_login3 = st.columns([2.75,2.5,2.75])
     with col_login2:
         st.markdown('<h2 style="text-align:center; margin-bottom: 20px;">Login</h2>', unsafe_allow_html=True)
-        usuario = st.text_input("Usuário", key="login_usuario")
+        usuario = st.text_input("E-mail", key="login_usuario")
         senha = st.text_input("Senha", type="password", key="login_senha")
         if st.button("Entrar", key="btn_main_entrar"):
             ok, nome, tipo = autentica_usuario(usuario, senha)
