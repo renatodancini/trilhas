@@ -61,25 +61,80 @@ def limpar_sessao_compartilhada():
 def inicializa_usuarios():
     try:
         df = pd.read_csv(USERS_FILE)
+        # Verificar se a coluna categorias existe, se não, adicionar
+        if 'categorias' not in df.columns:
+            df['categorias'] = '[]'  # JSON vazio para usuários existentes
+            df.to_csv(USERS_FILE, index=False)
     except (FileNotFoundError, pd.errors.EmptyDataError):
-        df = pd.DataFrame(columns=['nome', 'email', 'senha', 'tipo'])
+        df = pd.DataFrame(columns=['nome', 'email', 'senha', 'tipo', 'categorias'])
         df.to_csv(USERS_FILE, index=False)
 
 def autentica_usuario(email, senha):
     df = pd.read_csv(USERS_FILE)
     usuario = df[(df['email'] == email) & (df['senha'] == senha)]
     if not usuario.empty:
-        return True, usuario.iloc[0]['nome'], usuario.iloc[0]['tipo']
-    return False, None, None
+        return True, usuario.iloc[0]['nome'], usuario.iloc[0]['tipo'], usuario.iloc[0].get('categorias', '[]')
+    return False, None, None, None
 
-def cadastra_usuario(nome, email, senha, tipo):
+def cadastra_usuario(nome, email, senha, tipo, categorias='[]'):
     df = pd.read_csv(USERS_FILE)
     if email in df['email'].values:
         return False
-    novo_usuario = pd.DataFrame([[nome, email, senha, tipo]], columns=df.columns)
+    
+    # Verificar se a coluna categorias existe
+    if 'categorias' not in df.columns:
+        df['categorias'] = '[]'
+    
+    novo_usuario = pd.DataFrame([[nome, email, senha, tipo, categorias]], columns=df.columns)
     df = pd.concat([df, novo_usuario], ignore_index=True)
     df.to_csv(USERS_FILE, index=False)
     return True
+
+def obter_categorias_disponiveis():
+    """Obtém todas as categorias disponíveis baseadas nas 3 primeiras letras das trilhas"""
+    try:
+        import sqlite3
+        conn = sqlite3.connect('database_trilhas.db')
+        df = pd.read_sql_query('SELECT DISTINCT Trilhas FROM trilhas WHERE Trilhas IS NOT NULL', conn)
+        conn.close()
+        
+        if df.empty:
+            return []
+        
+        # Extrair as 3 primeiras letras de cada trilha
+        categorias = set()
+        for trilha in df['Trilhas']:
+            if trilha and len(trilha) >= 3:
+                categoria = trilha[:3].upper()
+                categorias.add(categoria)
+        
+        return sorted(list(categorias))
+    except Exception as e:
+        print(f"Erro ao obter categorias: {e}")
+        return []
+
+def obter_categorias_usuario(email):
+    """Obtém as categorias de um usuário específico"""
+    try:
+        df = pd.read_csv(USERS_FILE)
+        usuario = df[df['email'] == email]
+        if not usuario.empty:
+            import json
+            categorias_json = usuario.iloc[0].get('categorias', '[]')
+            return json.loads(categorias_json)
+        return []
+    except Exception as e:
+        print(f"Erro ao obter categorias do usuário: {e}")
+        return []
+
+def filtrar_trilhas_por_categoria(df_trilhas, categorias_usuario):
+    """Filtra trilhas baseado nas categorias do usuário"""
+    if not categorias_usuario:
+        return df_trilhas  # Se não há categorias definidas, mostrar todas
+    
+    # Filtrar trilhas que começam com as categorias do usuário
+    df_filtrado = df_trilhas[df_trilhas['Trilhas'].str[:3].str.upper().isin(categorias_usuario)]
+    return df_filtrado
 
 def salva_impressao_upload(df):
     import json

@@ -13,6 +13,8 @@ def inicializa_session_state():
         st.session_state['email_usuario'] = ''
     if 'tipo_usuario' not in st.session_state:
         st.session_state['tipo_usuario'] = ''
+    if 'categorias_usuario' not in st.session_state:
+        st.session_state['categorias_usuario'] = []
     if 'show_login' not in st.session_state:
         st.session_state['show_login'] = False
     if 'session_id' not in st.session_state:
@@ -35,7 +37,7 @@ from utils import (
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
     salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
     gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, registrar_download_trilha, buscar_controle_downloads, atualizar_status_download,
-    verificar_sessao_ativa, limpar_sessao_compartilhada
+    verificar_sessao_ativa, limpar_sessao_compartilhada, obter_categorias_usuario, filtrar_trilhas_por_categoria
 )
 
 # Verificar se há sessão compartilhada ativa e limpar se necessário
@@ -112,6 +114,7 @@ with header_btn_col:
             st.session_state['usuario'] = ''
             st.session_state['email_usuario'] = ''
             st.session_state['tipo_usuario'] = ''
+            st.session_state['categorias_usuario'] = []
             st.session_state['session_id'] = None
             st.session_state['show_login'] = False
             
@@ -176,13 +179,22 @@ if (st.session_state.get('show_login', False) and not st.session_state['autentic
         usuario = st.text_input("E-mail", key="login_usuario")
         senha = st.text_input("Senha", type="password", key="login_senha")
         if st.button("Entrar", key="btn_main_entrar"):
-            ok, nome, tipo = autentica_usuario(usuario, senha)
+            ok, nome, tipo, categorias_json = autentica_usuario(usuario, senha)
             if ok:
                 # Configurar sessão individual do usuário
                 st.session_state['autenticado'] = True
                 st.session_state['usuario'] = nome
                 st.session_state['email_usuario'] = usuario
                 st.session_state['tipo_usuario'] = tipo
+                
+                # Processar categorias do usuário
+                import json
+                try:
+                    categorias = json.loads(categorias_json) if categorias_json else []
+                except:
+                    categorias = []
+                st.session_state['categorias_usuario'] = categorias
+                
                 st.session_state['session_id'] = f"{usuario}_{nome}_{tipo}"
                 st.session_state['show_login'] = False
                 
@@ -219,7 +231,19 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                 st.info("📭 Nenhuma trilha encontrada no banco de dados.")
                 st.write("Faça upload de dados na página 'Banco de Dados' para começar.")
             else:
-                # Criar combobox com as trilhas do novo banco
+                # Filtrar trilhas baseado nas categorias do usuário
+                categorias_usuario = st.session_state.get('categorias_usuario', [])
+                if categorias_usuario:
+                    df_trilhas_novo = filtrar_trilhas_por_categoria(df_trilhas_novo, categorias_usuario)
+                    
+                    if df_trilhas_novo.empty:
+                        st.warning(f"⚠️ Nenhuma trilha encontrada para suas categorias: {', '.join(categorias_usuario)}")
+                        st.info("Entre em contato com o administrador para solicitar acesso a outras categorias.")
+                        st.stop()
+                    else:
+                        st.success(f"📂 Mostrando trilhas das categorias: {', '.join(categorias_usuario)}")
+                
+                # Criar combobox com as trilhas filtradas
                 opcoes_combo = []
                 for _, row in df_trilhas_novo.iterrows():
                     trilha = row['Trilhas']
@@ -275,6 +299,18 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                 df_controle = buscar_controle_downloads()
                 
                 if not df_controle.empty:
+                    # Filtrar trilhas baseado nas categorias do usuário
+                    categorias_usuario = st.session_state.get('categorias_usuario', [])
+                    if categorias_usuario:
+                        df_controle = filtrar_trilhas_por_categoria(df_controle, categorias_usuario)
+                        
+                        if df_controle.empty:
+                            st.warning(f"⚠️ Nenhuma trilha encontrada para suas categorias: {', '.join(categorias_usuario)}")
+                            st.info("Entre em contato com o administrador para solicitar acesso a outras categorias.")
+                            st.stop()
+                        else:
+                            st.success(f"📂 Mostrando trilhas das categorias: {', '.join(categorias_usuario)}")
+                    
                     # Renomear colunas para melhor apresentação
                     df_controle = df_controle.rename(columns={
                         'Trilhas': 'Trilhas',

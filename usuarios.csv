@@ -1,2 +1,2 @@
-nome,email,senha,tipo
-Renato Dancini,renato.dancini@sipal.com.br,admin123,admin
+nome,email,senha,tipo,categorias
+Renato Dancini,renato.dancini@sipal.com.br,admin123,admin,[]
