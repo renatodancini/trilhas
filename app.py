@@ -289,23 +289,49 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                             lambda x: x if x == '' else x.replace('T', ' ').split('.')[0]
                         )
                     
-                    # Exibir tabela
-                    st.dataframe(df_controle, use_container_width=True)
+                    # Campo de pesquisa
+                    pesquisa = st.text_input(
+                        "🔍 Pesquisar trilhas",
+                        placeholder="Digite o nome da trilha, usuário ou status...",
+                        help="Pesquise por nome da trilha, usuário que imprimiu ou status (SIM/NÃO)"
+                    )
+                    
+                    # Filtrar dados baseado na pesquisa
+                    if pesquisa:
+                        pesquisa_lower = pesquisa.lower()
+                        df_filtrado = df_controle[
+                            df_controle['Trilhas'].str.lower().str.contains(pesquisa_lower, na=False) |
+                            df_controle['Impresso por'].str.lower().str.contains(pesquisa_lower, na=False) |
+                            df_controle['Impresso'].str.lower().str.contains(pesquisa_lower, na=False)
+                        ]
+                        
+                        if not df_filtrado.empty:
+                            st.success(f"📋 Encontradas {len(df_filtrado)} trilha(s) com '{pesquisa}'")
+                            st.dataframe(df_filtrado, use_container_width=True)
+                        else:
+                            st.warning(f"🔍 Nenhuma trilha encontrada com '{pesquisa}'")
+                            st.info("Tente usar termos diferentes ou verifique a ortografia.")
+                    else:
+                        # Exibir tabela completa se não há pesquisa
+                        st.dataframe(df_controle, use_container_width=True)
+                    
+                    # Estatísticas baseadas nos dados filtrados ou completos
+                    df_para_estatisticas = df_filtrado if pesquisa and not df_filtrado.empty else df_controle
                     
                     # Estatísticas
                     st.write("### 📊 Estatísticas")
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        total_trilhas = len(df_controle)
+                        total_trilhas = len(df_para_estatisticas)
                         st.metric("Total de Trilhas", total_trilhas)
                     
                     with col2:
-                        trilhas_impressas = len(df_controle[df_controle['Impresso'] == 'SIM'])
+                        trilhas_impressas = len(df_para_estatisticas[df_para_estatisticas['Impresso'] == 'SIM'])
                         st.metric("Trilhas Impressas", trilhas_impressas)
                     
                     with col3:
-                        trilhas_pendentes = len(df_controle[df_controle['Impresso'] == 'NÃO'])
+                        trilhas_pendentes = len(df_para_estatisticas[df_para_estatisticas['Impresso'] == 'NÃO'])
                         st.metric("Trilhas Pendentes", trilhas_pendentes)
                     
                 else:
