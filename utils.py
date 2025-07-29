@@ -94,11 +94,21 @@ def obter_categorias_disponiveis():
     """Obtém todas as categorias disponíveis baseadas nas 3 primeiras letras dos códigos das trilhas"""
     try:
         import sqlite3
-        conn = sqlite3.connect('database_trilhas.db')
-        df = pd.read_sql_query('SELECT DISTINCT Trilhas FROM trilhas WHERE Trilhas IS NOT NULL', conn)
+        import os
+        
+        # Buscar no banco database_trilhas.db (usado na página de impressão de trilhas)
+        db_path = os.path.join("Impressão de trilhas", "database_trilhas.db")
+        
+        if not os.path.exists(db_path):
+            print(f"Banco de dados não encontrado: {db_path}")
+            return []
+        
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql_query('SELECT DISTINCT Trilhas FROM trilhas WHERE Trilhas IS NOT NULL AND Trilhas != ""', conn)
         conn.close()
         
         if df.empty:
+            print("Nenhuma trilha encontrada no banco de dados")
             return []
         
         # Extrair as 3 primeiras letras dos códigos das trilhas
@@ -118,6 +128,7 @@ def obter_categorias_disponiveis():
                     categoria = trilha[:3].upper()
                     categorias.add(categoria)
         
+        print(f"Categorias encontradas: {sorted(list(categorias))}")
         return sorted(list(categorias))
     except Exception as e:
         print(f"Erro ao obter categorias: {e}")
@@ -820,3 +831,55 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
     
     buffer.seek(0)
     return buffer.read() 
+
+def atualizar_categorias_usuario(email, novas_categorias):
+    """Atualiza as categorias de um usuário específico"""
+    try:
+        df = pd.read_csv(USERS_FILE)
+        usuario_idx = df[df['email'] == email].index
+        
+        if len(usuario_idx) == 0:
+            return False, "Usuário não encontrado"
+        
+        # Converter lista para JSON
+        import json
+        categorias_json = json.dumps(novas_categorias) if novas_categorias else "[]"
+        
+        # Atualizar categorias
+        df.loc[usuario_idx[0], 'categorias'] = categorias_json
+        df.to_csv(USERS_FILE, index=False)
+        
+        return True, "Categorias atualizadas com sucesso"
+    except Exception as e:
+        return False, f"Erro ao atualizar categorias: {e}"
+
+def obter_usuarios_com_categorias():
+    """Obtém todos os usuários com suas categorias"""
+    try:
+        df = pd.read_csv(USERS_FILE)
+        
+        # Verificar se a coluna categorias existe
+        if 'categorias' not in df.columns:
+            df['categorias'] = '[]'
+            df.to_csv(USERS_FILE, index=False)
+        
+        # Converter JSON para lista
+        import json
+        usuarios_com_categorias = []
+        for _, row in df.iterrows():
+            try:
+                categorias = json.loads(row.get('categorias', '[]'))
+            except:
+                categorias = []
+            
+            usuarios_com_categorias.append({
+                'nome': row['nome'],
+                'email': row['email'],
+                'tipo': row['tipo'],
+                'categorias': categorias
+            })
+        
+        return usuarios_com_categorias
+    except Exception as e:
+        print(f"Erro ao obter usuários com categorias: {e}")
+        return [] 

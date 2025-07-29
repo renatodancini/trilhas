@@ -1,11 +1,15 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from utils import USERS_FILE, DB_FILE, cadastra_usuario, salva_impressao_upload, limpa_gestao_trilhas, salva_gestao_trilhas, busca_gestao_trilhas, sincronizar_database2
+from utils import (
+    USERS_FILE, DB_FILE, cadastra_usuario, salva_impressao_upload, limpa_gestao_trilhas, 
+    salva_gestao_trilhas, busca_gestao_trilhas, sincronizar_database2,
+    obter_categorias_disponiveis, obter_usuarios_com_categorias, atualizar_categorias_usuario
+)
 
 def tela_configuracao():
     st.write("# Configurações")
-    aba1, aba2, aba3 = st.tabs(["Cadastro de Usuários", "Upload de dados", "Banco de Dados"])
+    aba1, aba2, aba3, aba4 = st.tabs(["Cadastro de Usuários", "Gestão de Categorias", "Upload de dados", "Banco de Dados"])
     with aba1:
         with st.form("cadastro_usuario"):
             nome = st.text_input("Nome")
@@ -74,6 +78,73 @@ def tela_configuracao():
             except AttributeError:
                 st.experimental_rerun()
     with aba2:
+        st.write("## 📂 Gestão de Categorias dos Usuários")
+        
+        # Obter categorias disponíveis
+        categorias_disponiveis = obter_categorias_disponiveis()
+        
+        if categorias_disponiveis:
+            st.success(f"✅ {len(categorias_disponiveis)} categorias encontradas no banco de dados")
+            
+            # Mostrar categorias disponíveis
+            st.write("### 🏷️ Categorias Disponíveis")
+            col1, col2 = st.columns(2)
+            with col1:
+                for i, categoria in enumerate(categorias_disponiveis[:len(categorias_disponiveis)//2]):
+                    st.write(f"• **{categoria}**")
+            with col2:
+                for i, categoria in enumerate(categorias_disponiveis[len(categorias_disponiveis)//2:]):
+                    st.write(f"• **{categoria}**")
+            
+            # Obter usuários com categorias
+            usuarios_com_categorias = obter_usuarios_com_categorias()
+            
+            if usuarios_com_categorias:
+                st.write("### 👥 Usuários e Suas Categorias")
+                
+                # Criar interface para editar categorias
+                for i, usuario in enumerate(usuarios_com_categorias):
+                    with st.expander(f"📝 {usuario['nome']} ({usuario['email']}) - {usuario['tipo']}"):
+                        # Mostrar categorias atuais
+                        categorias_atuais = usuario['categorias']
+                        if categorias_atuais:
+                            st.write(f"**Categorias atuais:** {', '.join(categorias_atuais)}")
+                        else:
+                            st.write("**Categorias atuais:** Nenhuma categoria definida")
+                        
+                        # Interface para selecionar novas categorias
+                        novas_categorias = st.multiselect(
+                            "Selecionar categorias:",
+                            options=categorias_disponiveis,
+                            default=categorias_atuais,
+                            key=f"categorias_{usuario['email']}_{i}"
+                        )
+                        
+                        # Botão para salvar
+                        if st.button("💾 Salvar Categorias", key=f"salvar_{usuario['email']}_{i}"):
+                            sucesso, mensagem = atualizar_categorias_usuario(usuario['email'], novas_categorias)
+                            if sucesso:
+                                st.success(mensagem)
+                                st.rerun()
+                            else:
+                                st.error(mensagem)
+            else:
+                st.info("📭 Nenhum usuário encontrado no sistema.")
+        else:
+            st.warning("⚠️ Nenhuma categoria encontrada no banco de dados.")
+            st.info("Faça upload de trilhas na página 'Banco de Dados' para criar categorias.")
+            
+            # Mostrar usuários mesmo sem categorias
+            usuarios_com_categorias = obter_usuarios_com_categorias()
+            if usuarios_com_categorias:
+                st.write("### 👥 Usuários Cadastrados")
+                for usuario in usuarios_com_categorias:
+                    st.write(f"• **{usuario['nome']}** ({usuario['email']}) - {usuario['tipo']}")
+                    if usuario['categorias']:
+                        st.write(f"  📂 Categorias: {', '.join(usuario['categorias'])}")
+                    else:
+                        st.write(f"  📂 Categorias: Nenhuma categoria definida")
+    with aba3:
         st.write("## Upload de dados")
         
         # Botão para sincronizar database_2.db
@@ -207,7 +278,7 @@ def tela_configuracao():
             st.dataframe(df_trilhas_banco)
         else:
             st.info("Nenhum dado disponível na tabela de gestão de trilhas.")
-    with aba3:
+    with aba4:
         st.write("## Visualização Completa do Banco de Dados")
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
