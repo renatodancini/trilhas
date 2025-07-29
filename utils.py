@@ -742,16 +742,25 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None
         worksheet.set_row(0, 25)
         
         # Definir altura das linhas de dados e cabeçalhos de categoria
-        for row_num in range(2, linha_atual):
-            if row_num == 2:  # Cabeçalhos das colunas
-                worksheet.set_row(row_num, 20)
-            else:
-                # Verificar se é linha de categoria
-                categoria_value = worksheet.read(row_num, 0)
-                if isinstance(categoria_value, str) and categoria_value.startswith('CATEGORIA:'):
-                    worksheet.set_row(row_num, 18)  # Altura para cabeçalhos de categoria
-                else:
-                    worksheet.set_row(row_num, 20)  # Altura para linhas de dados
+        linha_atual = 2  # Começar da linha dos cabeçalhos
+        
+        # Agrupar atividades por código BPH para definir alturas
+        grupos_bph = df_atividades.groupby('codigo_bph')
+        
+        for codigo_bph, grupo in grupos_bph:
+            # Definir altura do cabeçalho da categoria
+            if codigo_bph != "Sem BPH":
+                worksheet.set_row(linha_atual, 18)  # Altura para cabeçalhos de categoria
+                linha_atual += 1
+            
+            # Definir altura das linhas de dados da categoria
+            for _ in range(len(grupo)):
+                worksheet.set_row(linha_atual, 20)  # Altura para linhas de dados
+                linha_atual += 1
+            
+            # Adicionar linha em branco entre categorias (exceto na última)
+            if codigo_bph != list(grupos_bph.groups.keys())[-1]:
+                linha_atual += 1
     
     buffer.seek(0)
     return buffer.read() 
