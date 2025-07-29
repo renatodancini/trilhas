@@ -22,6 +22,7 @@ from controle_trilhas import criar_tabela_controle_execucao
 from tela_registre_se import tela_registre_se
 from tela_perfil import tela_perfil
 from tela_configuracao import tela_configuracao
+from banco_de_dados import tela_banco_dados
 from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
@@ -123,6 +124,7 @@ with st.sidebar:
         opcoes_menu.append("Impressão de Trilhas")
         opcoes_menu.append("Perfil")
         opcoes_menu.append("Controle de Trilhas")
+        opcoes_menu.append("Banco de Dados")
         # Descobre tipo do usuário logado
         try:
             df_usuarios = pd.read_csv(USERS_FILE)
@@ -417,6 +419,15 @@ elif pagina == "Controle de Trilhas" and not st.session_state.get('show_login', 
         colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em']
         colunas_existentes = [col for col in colunas_exibir if col in df_merged.columns]
         st.dataframe(df_merged[colunas_existentes])
+
+# Banco de Dados
+elif pagina == "Banco de Dados" and not st.session_state.get('show_login', False):
+    if not st.session_state['autenticado']:
+        st.warning("Faça login para acessar o banco de dados.")
+        st.stop()
+    
+    # Chamar a tela do banco de dados
+    tela_banco_dados()
 
 # Rodapé
 st.markdown("""

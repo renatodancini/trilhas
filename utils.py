@@ -185,9 +185,20 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     # Buscar atividades da trilha no banco de dados
     conn = sqlite3.connect(DB_FILE)
     try:
+        # Primeiro, verificar se a coluna Código existe na tabela
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(gestao_trilhas)")
+        colunas_tabela = [col[1] for col in c.fetchall()]
+        
+        # Definir as colunas para buscar baseado na estrutura da tabela
+        if 'Código' in colunas_tabela:
+            colunas_buscar = 'Atividade, Responsável, Tipo, Finalizado, Observações, Código'
+        else:
+            colunas_buscar = 'Atividade, Responsável, Tipo, Finalizado, Observações'
+        
         # Buscar todas as atividades válidas da trilha específica (excluindo cabeçalhos e emails)
         df_atividades = pd.read_sql_query(
-            '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+            f'''SELECT {colunas_buscar}
                FROM gestao_trilhas 
                WHERE Trilhas = ? 
                AND Atividade IS NOT NULL 
@@ -205,7 +216,7 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         if df_atividades.empty:
             # Buscar trilhas que contenham o nome da trilha
             df_atividades = pd.read_sql_query(
-                '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+                f'''SELECT {colunas_buscar}
                    FROM gestao_trilhas 
                    WHERE Trilhas LIKE ? 
                    AND Atividade IS NOT NULL 
@@ -223,7 +234,7 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
                 # Se ainda não encontrou, buscar por código
                 if codigo_trilha:
                     df_atividades = pd.read_sql_query(
-                        '''SELECT Atividade, Responsável, Tipo, Finalizado, Observações 
+                        f'''SELECT {colunas_buscar}
                            FROM gestao_trilhas 
                            WHERE Trilhas LIKE ? 
                            AND Atividade IS NOT NULL 
@@ -237,113 +248,80 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
                         params=[f'%{codigo_trilha}%']
                     )
         
-        # Se não encontrou atividades, criar atividades baseadas no código da trilha
+        # Se não encontrou atividades, criar atividades corretas conforme imagem
         if df_atividades.empty:
-            # Criar atividades específicas baseadas no código CMR
+            # Criar atividades corretas conforme mostrado na imagem
             atividades_template = [
                 {
-                    'Atividade': f'{codigo_trilha} - BPH004251 - 1. Relatório de estoques / Disponibilidade do Produto',
-                    'Responsável': 'bruno.lobo@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
+                    'Atividade': '1. Análise inicial da trilha',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Análise',
+                    'Finalizado': 'Não',
+                    'Observações': 'Primeira etapa da trilha'
                 },
                 {
-                    'Atividade': f'{codigo_trilha} - BPH004047 - 2. Criar contrato de compra',
-                    'Responsável': 'bruno.lobo@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
+                    'Atividade': '2. Execução das atividades principais',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Execução',
+                    'Finalizado': 'Não',
+                    'Observações': 'Atividades específicas da trilha'
                 },
                 {
-                    'Atividade': f'{codigo_trilha} - BPH003890 - 3. Aprovar contrato de Compras',
-                    'Responsável': 'lucas.sbardella@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
+                    'Atividade': '3. Validação e testes',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Validação',
+                    'Finalizado': 'Não',
+                    'Observações': 'Verificação dos resultados'
                 },
                 {
-                    'Atividade': f'{codigo_trilha} - BPH003890 - 4. Consultar aprovação de workflow',
-                    'Responsável': 'lucas.sbardella@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH003625 - 5. Avaliar fluxo de caixa diário',
-                    'Responsável': 'caroline.silva@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH004065 - 6. Criar pedido de compra vinculado ao contrato',
-                    'Responsável': 'bruno.lobo@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH003386 - 7. Realizar Pré Validação Fiscal do Pedido de Compra [VALIDAÇÃO]',
-                    'Responsável': 'everton.siqueira@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH003625 - 8. Avaliar fluxo de caixa diário',
-                    'Responsável': 'caroline.silva@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH004054 - 9. Lançar contrato de Venda',
-                    'Responsável': 'anna.santos@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH004301 - 10. Aprovar contrato de Venda',
-                    'Responsável': 'anna.santos@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH003625 - 11. Avaliar fluxo de caixa diário',
-                    'Responsável': 'caroline.silva@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH004055 - 12. Lançar ordem de venda no sistema',
-                    'Responsável': 'lucas.sbardella@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH003523 - 13. Realizar Pré Validação Fiscal da Ordem de Venda [VALIDAÇÃO]',
-                    'Responsável': 'luiz.ferreira@sipal.com.br',
-                    'Tipo': 'SAP',
-                    'Finalizado': '',
-                    'Observações': ''
-                },
-                {
-                    'Atividade': f'{codigo_trilha} - BPH001162 - 14. Identificar a demanda na plataforma',
-                    'Responsável': 'simone.tessaro@sipal.com.br',
-                    'Tipo': 'Tarken',
-                    'Finalizado': '',
-                    'Observações': ''
+                    'Atividade': '4. Finalização e documentação',
+                    'Responsável': 'A definir',
+                    'Tipo': 'Finalização',
+                    'Finalizado': 'Não',
+                    'Observações': 'Conclusão da trilha'
                 }
             ]
             df_atividades = pd.DataFrame(atividades_template)
-            print(f"Atividades específicas criadas para a trilha: {nome_trilha}")
+            print(f"Atividades corretas criadas para a trilha: {nome_trilha}")
         else:
             print(f"Encontradas {len(df_atividades)} atividades para a trilha: {nome_trilha}")
+            
+            # Formatar as atividades no padrão correto
+            def formatar_atividade(row):
+                atividade = str(row['Atividade'])
+                
+                # Verificar se a coluna Código existe e tem valor
+                codigo_atividade = ''
+                if 'Código' in row and pd.notnull(row['Código']) and row['Código']:
+                    codigo_atividade = str(row['Código'])
+                
+                # Se a atividade já está no formato correto, retornar como está
+                if ' - ' in atividade and ('CMR' in atividade or 'BPH' in atividade):
+                    return atividade
+                
+                # Se temos código da trilha e código da atividade, formatar
+                if codigo_trilha and codigo_atividade and codigo_atividade != 'nan':
+                    # Extrair número da atividade (se existir)
+                    import re
+                    numero_match = re.search(r'^(\d+)\.', atividade)
+                    numero_atividade = numero_match.group(1) if numero_match else ''
+                    
+                    if numero_atividade:
+                        # Formato: CMR248.1 - BPH004197 - 43. Administrar deferimentos de crédito documentado
+                        return f"{codigo_trilha} - {codigo_atividade} - {atividade}"
+                    else:
+                        # Formato: CMR248.1 - BPH004197 - Administrar deferimentos de crédito documentado
+                        return f"{codigo_trilha} - {codigo_atividade} - {atividade}"
+                
+                # Se só temos código da trilha
+                elif codigo_trilha:
+                    return f"{codigo_trilha} - {atividade}"
+                
+                # Se não temos códigos, retornar atividade como está
+                return atividade
+            
+            # Aplicar formatação às atividades
+            df_atividades['Atividade'] = df_atividades.apply(formatar_atividade, axis=1)
             
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
@@ -357,27 +335,21 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
     # Salvar como XLSX com formatação
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         # Escrever o DataFrame primeiro para criar a worksheet
-        df_atividades.to_excel(writer, sheet_name='Trilha', startrow=5, index=False)
+        df_atividades.to_excel(writer, sheet_name='Trilha', startrow=3, index=False)
         
         # Agora podemos acessar a worksheet
         worksheet = writer.sheets['Trilha']
         workbook = writer.book
         
-        # Título da trilha na primeira linha
+        # Título da trilha na primeira linha (sem duplicação)
         worksheet.write(0, 0, f"{codigo_trilha} - {nome_trilha}")
         
-        # Descrição completa na segunda linha
-        worksheet.write(1, 0, f"{nome_trilha} - Ori. Fabrica / Dest. Cliente - (Compra FOB e Venda CIF - À Prazo) V - [C3]")
-        
-        # "Massa de dados não informada" na terceira linha
-        worksheet.write(2, 0, "Massa de dados não informada")
-        
-        # Data de geração na quarta linha
+        # Data de geração na segunda linha
         data_geracao = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        worksheet.write(3, 0, f"Gerado em: {data_geracao}")
+        worksheet.write(1, 0, f"Gerado em: {data_geracao}")
         
-        # Linha vazia na quinta linha
-        worksheet.write(4, 0, '')
+        # Linha vazia na terceira linha
+        worksheet.write(2, 0, '')
         
         # Formatar o título da trilha (primeira linha)
         title_format = workbook.add_format({
@@ -407,12 +379,12 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         
         # Aplicar formatação ao cabeçalho
         for col_num, value in enumerate(df_atividades.columns.values):
-            worksheet.write(5, col_num, value, header_format)
+            worksheet.write(3, col_num, value, header_format)
         
         # Aplicar formatação às células de dados (atividades)
         for row_num in range(len(df_atividades)):
             for col_num in range(len(df_atividades.columns)):
-                worksheet.write(row_num + 6, col_num, df_atividades.iloc[row_num, col_num], data_format)
+                worksheet.write(row_num + 4, col_num, df_atividades.iloc[row_num, col_num], data_format)
         
         # Ajustar largura das colunas
         worksheet.set_column('A:A', 60)  # Atividades
@@ -422,7 +394,7 @@ def gerar_xlsx_trilha(nome_trilha, codigo_trilha):
         worksheet.set_column('E:E', 20)  # Observações
     
     buffer.seek(0)
-    return buffer.read() 
+    return buffer.read()
 
 def atualizar_status_download(nome_trilha, usuario_logado):
     """

@@ -149,6 +149,26 @@ def tela_configuracao():
                 df_trilhas = pd.DataFrame(columns=colunas_trilhas)
                 
                 if df_upload.shape[1] >= 7:
+                    # Extrair códigos das atividades da coluna de atividades
+                    def extrair_codigo_atividade(atividade_str):
+                        if pd.isna(atividade_str) or atividade_str == '':
+                            return ''
+                        
+                        atividade_str = str(atividade_str)
+                        import re
+                        
+                        # Padrão para encontrar códigos BPH seguidos de números
+                        padrao_bph = r'BPH\d+'
+                        match_bph = re.search(padrao_bph, atividade_str)
+                        
+                        if match_bph:
+                            return match_bph.group(0)
+                        
+                        return ''
+                    
+                    # Aplicar extração de códigos
+                    codigos_atividades = df_upload.iloc[:, 1].apply(extrair_codigo_atividade)
+                    
                     df_trilhas = pd.DataFrame({
                         "Trilhas": df_upload.iloc[:, 0],
                         "Atividade": df_upload.iloc[:, 1],
@@ -156,7 +176,18 @@ def tela_configuracao():
                         "Tipo": df_upload.iloc[:, 3],
                         "Finalizado": df_upload.iloc[:, 4],
                         "Observações": df_upload.iloc[:, 5],
-                        "Código": df_upload.iloc[:, 6],
+                        "Código": codigos_atividades,
+                    })
+                else:
+                    # Se não tem 7 colunas, criar sem códigos
+                    df_trilhas = pd.DataFrame({
+                        "Trilhas": df_upload.iloc[:, 0],
+                        "Atividade": df_upload.iloc[:, 1],
+                        "Responsável": df_upload.iloc[:, 2],
+                        "Tipo": df_upload.iloc[:, 3],
+                        "Finalizado": df_upload.iloc[:, 4],
+                        "Observações": df_upload.iloc[:, 5] if df_upload.shape[1] > 5 else '',
+                        "Código": '',
                     })
                 
                 # Salvar dados de gestão
