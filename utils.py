@@ -457,7 +457,93 @@ def sincronizar_database2():
         print(f"Erro na sincronização: {e}")
         return False
 
-def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
+def registrar_download_trilha(nome_trilha, usuario_logado):
+    """Registra o download de uma trilha no banco de dados"""
+    import os
+    import datetime
+    
+    db_trilhas_path = os.path.join("Impressão de trilhas", "database_trilhas.db")
+    
+    if not os.path.exists(db_trilhas_path):
+        print(f"Banco de dados não encontrado: {db_trilhas_path}")
+        return False
+    
+    try:
+        conn = sqlite3.connect(db_trilhas_path)
+        cursor = conn.cursor()
+        
+        # Verificar se já existe registro para esta trilha
+        cursor.execute('SELECT id FROM controle_downloads WHERE Trilhas = ?', (nome_trilha,))
+        registro_existente = cursor.fetchone()
+        
+        data_hora_atual = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if registro_existente:
+            # Atualizar registro existente
+            cursor.execute('''
+                UPDATE controle_downloads 
+                SET Impresso = 'SIM', 
+                    Impresso_por = ?, 
+                    Modificado_em = ? 
+                WHERE Trilhas = ?
+            ''', (usuario_logado, data_hora_atual, nome_trilha))
+        else:
+            # Inserir novo registro
+            cursor.execute('''
+                INSERT INTO controle_downloads (Trilhas, Impresso, Impresso_por, Modificado_em)
+                VALUES (?, 'SIM', ?, ?)
+            ''', (nome_trilha, usuario_logado, data_hora_atual))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"Download da trilha '{nome_trilha}' registrado para o usuário '{usuario_logado}'")
+        return True
+        
+    except Exception as e:
+        print(f"Erro ao registrar download: {e}")
+        if 'conn' in locals():
+            conn.close()
+        return False
+
+def buscar_controle_downloads():
+    """Busca todos os registros de controle de downloads"""
+    import os
+    
+    db_trilhas_path = os.path.join("Impressão de trilhas", "database_trilhas.db")
+    
+    if not os.path.exists(db_trilhas_path):
+        return pd.DataFrame()
+    
+    try:
+        conn = sqlite3.connect(db_trilhas_path)
+        
+        # Buscar todas as trilhas únicas
+        df_trilhas = pd.read_sql_query('SELECT DISTINCT Trilhas FROM trilhas WHERE Trilhas IS NOT NULL AND Trilhas != ""', conn)
+        
+        # Buscar controle de downloads
+        df_controle = pd.read_sql_query('''
+            SELECT Trilhas, Impresso, Impresso_por, Modificado_em 
+            FROM controle_downloads
+        ''', conn)
+        
+        conn.close()
+        
+        # Mesclar trilhas com controle de downloads
+        df_resultado = pd.merge(df_trilhas, df_controle, on='Trilhas', how='left')
+        
+        # Preencher valores nulos
+        df_resultado['Impresso'] = df_resultado['Impresso'].fillna('NÃO')
+        df_resultado['Impresso_por'] = df_resultado['Impresso_por'].fillna('')
+        df_resultado['Modificado_em'] = df_resultado['Modificado_em'].fillna('')
+        
+        return df_resultado
+        
+    except Exception as e:
+        print(f"Erro ao buscar controle de downloads: {e}")
+        return pd.DataFrame()
+
+def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado=None):
     """
     Gera um arquivo XLSX para uma trilha específica usando dados do novo banco database_trilhas.db
     Formato: Linha 1 = Nome da Trilha, Linha 2 = Vazia, Linha 3 = Cabeçalhos, Demais linhas = Dados
@@ -534,6 +620,10 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
         df_atividades = pd.DataFrame(columns=['Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações'])
     finally:
         conn.close()
+    
+    # Registrar download se usuário foi fornecido
+    if usuario_logado:
+        registrar_download_trilha(nome_trilha, usuario_logado)
     
     # Criar arquivo Excel
     buffer = io.BytesIO()

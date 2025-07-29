@@ -38,13 +38,33 @@ def criar_database_trilhas():
             )
         ''')
         
+        # Criar tabela controle_downloads para rastrear downloads
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS controle_downloads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Trilhas TEXT NOT NULL,
+                Impresso TEXT DEFAULT 'NÃO',
+                Impresso_por TEXT,
+                Modificado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Verificar se a tabela foi criada corretamente
         cursor.execute("PRAGMA table_info(trilhas)")
         colunas = cursor.fetchall()
         
         print("✅ Tabela 'trilhas' criada com sucesso!")
-        print("📋 Estrutura da tabela:")
+        print("📋 Estrutura da tabela 'trilhas':")
         for coluna in colunas:
+            print(f"   - {coluna[1]} ({coluna[2]})")
+        
+        # Verificar tabela controle_downloads
+        cursor.execute("PRAGMA table_info(controle_downloads)")
+        colunas_controle = cursor.fetchall()
+        
+        print("✅ Tabela 'controle_downloads' criada com sucesso!")
+        print("📋 Estrutura da tabela 'controle_downloads':")
+        for coluna in colunas_controle:
             print(f"   - {coluna[1]} ({coluna[2]})")
         
         # Commit das alterações
@@ -87,13 +107,29 @@ def verificar_database_trilhas():
         for coluna in colunas:
             print(f"   - {coluna[1]} ({coluna[2]})")
         
-        # Contar registros
-        cursor.execute("SELECT COUNT(*) FROM trilhas")
-        total_registros = cursor.fetchone()[0]
-        print(f"📊 Total de registros: {total_registros}")
+        # Verificar tabela controle_downloads
+        cursor.execute("PRAGMA table_info(controle_downloads)")
+        colunas_controle = cursor.fetchall()
         
-        if total_registros == 0:
-            print("✅ Banco de dados está vazio, conforme solicitado!")
+        print("📋 Estrutura da tabela 'controle_downloads':")
+        for coluna in colunas_controle:
+            print(f"   - {coluna[1]} ({coluna[2]})")
+        
+        # Contar registros em ambas as tabelas
+        cursor.execute("SELECT COUNT(*) FROM trilhas")
+        total_registros_trilhas = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM controle_downloads")
+        total_registros_controle = cursor.fetchone()[0]
+        
+        print(f"📊 Total de registros na tabela 'trilhas': {total_registros_trilhas}")
+        print(f"📊 Total de registros na tabela 'controle_downloads': {total_registros_controle}")
+        
+        if total_registros_trilhas == 0:
+            print("✅ Tabela 'trilhas' está vazia, conforme solicitado!")
+        
+        if total_registros_controle == 0:
+            print("✅ Tabela 'controle_downloads' está vazia, conforme esperado!")
         
     except Exception as e:
         print(f"❌ Erro ao verificar banco de dados: {e}")

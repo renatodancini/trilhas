@@ -27,7 +27,7 @@ from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
     salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
-    gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, atualizar_status_download
+    gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, registrar_download_trilha, buscar_controle_downloads, atualizar_status_download
 )
 
 # Ao iniciar, tenta restaurar login
@@ -229,7 +229,8 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                             nome_trilha = trilha_selecionada
                         
                         # Gerar arquivo XLSX usando dados do novo banco
-                        xlsx_bytes = gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha)
+                        usuario_logado = st.session_state.get('usuario', 'Usuário Desconhecido')
+                        xlsx_bytes = gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha, usuario_logado)
                         
                         # Botão de download
                         st.download_button(
@@ -242,17 +243,46 @@ if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', 
                 # Exibir tabela com dados do novo banco
                 st.write("### Dados das Trilhas")
                 
-                # Buscar todas as atividades do novo banco
-                df_atividades = pd.read_sql_query('''
-                    SELECT Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações 
-                    FROM trilhas 
-                    ORDER BY Trilhas, Atividades
-                ''', conn_trilhas)
+                # Buscar dados de controle de downloads
+                df_controle = buscar_controle_downloads()
                 
-                if not df_atividades.empty:
-                    st.dataframe(df_atividades, use_container_width=True)
+                if not df_controle.empty:
+                    # Renomear colunas para melhor apresentação
+                    df_controle = df_controle.rename(columns={
+                        'Trilhas': 'Trilhas',
+                        'Impresso': 'Impresso',
+                        'Impresso_por': 'Impresso por',
+                        'Modificado_em': 'Modificado em'
+                    })
+                    
+                    # Formatar data/hora se necessário
+                    if 'Modificado em' in df_controle.columns:
+                        df_controle['Modificado em'] = df_controle['Modificado em'].apply(
+                            lambda x: x if x == '' else x.replace('T', ' ').split('.')[0]
+                        )
+                    
+                    # Exibir tabela
+                    st.dataframe(df_controle, use_container_width=True)
+                    
+                    # Estatísticas
+                    st.write("### 📊 Estatísticas")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        total_trilhas = len(df_controle)
+                        st.metric("Total de Trilhas", total_trilhas)
+                    
+                    with col2:
+                        trilhas_impressas = len(df_controle[df_controle['Impresso'] == 'SIM'])
+                        st.metric("Trilhas Impressas", trilhas_impressas)
+                    
+                    with col3:
+                        trilhas_pendentes = len(df_controle[df_controle['Impresso'] == 'NÃO'])
+                        st.metric("Trilhas Pendentes", trilhas_pendentes)
+                    
                 else:
-                    st.info("📭 Nenhuma atividade encontrada no banco de dados.")
+                    st.info("📭 Nenhuma trilha encontrada no banco de dados.")
+                    st.write("Faça upload de dados na página 'Banco de Dados' para começar.")
         
         except Exception as e:
             st.error(f"❌ Erro ao acessar banco de dados: {e}")
