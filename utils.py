@@ -429,58 +429,185 @@ def atualizar_status_download(nome_trilha, usuario_logado):
         conn.close() 
 
 def sincronizar_database2():
-    """
-    Sincroniza os dados do banco principal (login_status.db) para o database_2.db
-    """
+    """Sincroniza dados entre os bancos de dados"""
     try:
-        # Conectar aos dois bancos
-        conn_principal = sqlite3.connect(DB_FILE)
-        conn_database2 = sqlite3.connect('database_2.db')
+        # Conectar aos bancos
+        conn_login = sqlite3.connect(DB_FILE)
+        conn2 = sqlite3.connect('database_2.db')
         
-        # Buscar apenas as trilhas principais (sem atividade preenchida)
-        df_gestao = pd.read_sql_query('''
-            SELECT DISTINCT Trilhas, Código 
-            FROM gestao_trilhas 
-            WHERE Trilhas IS NOT NULL 
-            AND Trilhas != "" 
-            AND (Atividade IS NULL OR Atividade = "" OR Atividade = "Responsável")
-            AND Trilhas != "Massa de dados não informada"
-        ''', conn_principal)
+        # Buscar dados do login_status.db
+        df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_login)
         
-        print(f"Sincronizando {len(df_gestao)} trilhas principais para database_2.db")
+        # Buscar dados do database_2.db
+        df_controle = pd.read_sql_query('SELECT Trilhas FROM controle_trilhas', conn2)
         
-        # Limpar tabela controle_trilhas no database_2.db
-        c = conn_database2.cursor()
-        c.execute('DELETE FROM controle_trilhas')
-        c.execute('DELETE FROM controle_execucao')
+        # Mesclar dados
+        df_merged = pd.merge(df_controle, df_gestao, on='Trilhas', how='left')
         
-        # Inserir dados na tabela controle_trilhas
-        for _, row in df_gestao.iterrows():
-            trilha = row['Trilhas']
-            codigo = row['Código'] if pd.notnull(row['Código']) else ''
-            
-            c.execute('''
-                INSERT INTO controle_trilhas (Trilhas, Status, "Modificado por", "Modificado em") 
-                VALUES (?, ?, ?, ?)
-            ''', (trilha, 'Pendente', '', ''))
-            
-            # Também inserir na tabela controle_execucao
-            c.execute('''
-                INSERT INTO controle_execucao (trilha, categoria, status, modificado_por, modificado_em) 
-                VALUES (?, ?, ?, ?, ?)
-            ''', (trilha, 0, 'Pendente', '', ''))
+        # Atualizar database_2.db
+        df_merged.to_sql('controle_trilhas', conn2, if_exists='replace', index=False)
         
-        conn_database2.commit()
-        conn_principal.close()
-        conn_database2.close()
+        conn_login.close()
+        conn2.close()
         
-        print("✅ Sincronização concluída com sucesso!")
+        print("Sincronização concluída com sucesso!")
         return True
         
     except Exception as e:
-        print(f"❌ Erro na sincronização: {e}")
-        if 'conn_principal' in locals():
-            conn_principal.close()
-        if 'conn_database2' in locals():
-            conn_database2.close()
-        return False 
+        print(f"Erro na sincronização: {e}")
+        return False
+
+def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
+    """
+    Gera um arquivo XLSX para uma trilha específica usando dados do novo banco database_trilhas.db
+    """
+    import pandas as pd
+    import io
+    import datetime
+    import os
+    
+    # Caminho para o novo banco de dados
+    db_trilhas_path = os.path.join("Impressão de trilhas", "database_trilhas.db")
+    
+    if not os.path.exists(db_trilhas_path):
+        raise Exception("Banco de dados database_trilhas.db não encontrado!")
+    
+    # Buscar atividades da trilha no novo banco de dados
+    conn = sqlite3.connect(db_trilhas_path)
+    try:
+        # Buscar todas as atividades da trilha específica
+        df_atividades = pd.read_sql_query(
+            '''SELECT Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações
+               FROM trilhas 
+               WHERE Trilhas = ? 
+               AND Atividades IS NOT NULL 
+               AND Atividades != ""
+               ORDER BY Atividades''', 
+            conn, 
+            params=[nome_trilha]
+        )
+        
+        if df_atividades.empty:
+            # Se não há atividades, criar template básico
+            print(f"Nenhuma atividade encontrada para a trilha: {nome_trilha}")
+            df_atividades = pd.DataFrame({
+                'Trilhas': [nome_trilha],
+                'Atividades': ['Atividade de exemplo'],
+                'Responsável': ['Responsável'],
+                'Tipo': ['Tipo'],
+                'Finalizado': ['Não'],
+                'Observações': ['Observação']
+            })
+        else:
+            print(f"Encontradas {len(df_atividades)} atividades para a trilha: {nome_trilha}")
+            
+            # Formatar as atividades no padrão correto
+            def formatar_atividade(row):
+                atividade = str(row['Atividades'])
+                
+                # Se a atividade já está no formato correto, retornar como está
+                if ' - ' in atividade and ('CMR' in atividade or 'BPH' in atividade):
+                    return atividade
+                
+                # Se temos código da trilha, formatar
+                if codigo_trilha:
+                    # Extrair número da atividade (se existir)
+                    import re
+                    numero_match = re.search(r'^(\d+)\.', atividade)
+                    numero_atividade = numero_match.group(1) if numero_match else ''
+                    
+                    if numero_atividade:
+                        # Formato: CMR248.1 - BPH004197 - 43. Administrar deferimentos de crédito documentado
+                        return f"{codigo_trilha} - BPH{numero_atividade.zfill(6)} - {atividade}"
+                    else:
+                        # Formato: CMR248.1 - Administrar deferimentos de crédito documentado
+                        return f"{codigo_trilha} - {atividade}"
+                
+                # Se não temos códigos, retornar atividade como está
+                return atividade
+            
+            # Aplicar formatação às atividades
+            df_atividades['Atividades'] = df_atividades.apply(formatar_atividade, axis=1)
+        
+    except Exception as e:
+        print(f"Erro ao buscar atividades: {e}")
+        df_atividades = pd.DataFrame(columns=['Trilhas', 'Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações'])
+    finally:
+        conn.close()
+    
+    # Criar arquivo Excel
+    buffer = io.BytesIO()
+    
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        # Escrever dados das atividades
+        df_atividades.to_excel(writer, sheet_name='Atividades', index=False)
+        
+        # Obter workbook e worksheet para formatação
+        workbook = writer.book
+        worksheet = writer.sheets['Atividades']
+        
+        # Definir formatos
+        header_format = workbook.add_format({
+            'bold': True,
+            'text_wrap': True,
+            'valign': 'top',
+            'fg_color': '#D7E4BC',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'text_wrap': True,
+            'valign': 'top',
+            'border': 1
+        })
+        
+        # Aplicar formatação ao cabeçalho
+        for col_num, value in enumerate(df_atividades.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+        
+        # Aplicar formatação às células de dados
+        for row_num in range(len(df_atividades)):
+            for col_num in range(len(df_atividades.columns)):
+                worksheet.write(row_num + 1, col_num, df_atividades.iloc[row_num, col_num], cell_format)
+        
+        # Ajustar largura das colunas
+        for i, col in enumerate(df_atividades.columns):
+            max_length = max(
+                df_atividades[col].astype(str).apply(len).max(),
+                len(col)
+            )
+            worksheet.set_column(i, i, min(max_length + 2, 50))
+        
+        # Adicionar informações da trilha
+        info_sheet = workbook.add_worksheet('Informações')
+        
+        info_data = [
+            ['Informações da Trilha'],
+            [''],
+            ['Nome da Trilha:', nome_trilha],
+            ['Código da Trilha:', codigo_trilha if codigo_trilha else 'N/A'],
+            ['Data de Geração:', datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')],
+            ['Total de Atividades:', len(df_atividades)],
+            [''],
+            ['Colunas do Arquivo:'],
+            ['• Trilhas: Nome da trilha'],
+            ['• Atividades: Descrição da atividade'],
+            ['• Responsável: Pessoa responsável'],
+            ['• Tipo: Tipo da atividade'],
+            ['• Finalizado: Status de conclusão'],
+            ['• Observações: Observações adicionais']
+        ]
+        
+        for row_num, row_data in enumerate(info_data):
+            for col_num, value in enumerate(row_data):
+                if row_num == 0:  # Título
+                    info_sheet.write(row_num, col_num, value, header_format)
+                else:
+                    info_sheet.write(row_num, col_num, value, cell_format)
+        
+        # Ajustar largura das colunas da aba de informações
+        info_sheet.set_column(0, 0, 20)
+        info_sheet.set_column(1, 1, 40)
+    
+    buffer.seek(0)
+    return buffer.read() 

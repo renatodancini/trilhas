@@ -27,7 +27,7 @@ from utils import (
     USERS_FILE, DB_FILE, inicializa_db, salva_login_status, busca_login_status, remove_login_status,
     inicializa_usuarios, autentica_usuario, cadastra_usuario, salva_impressao_upload, busca_impressao_upload,
     salva_gestao_trilhas, busca_gestao_trilhas, limpa_gestao_trilhas, atualiza_status_trilha, limpa_coluna_impresso_por,
-    gerar_xlsx_trilha, atualizar_status_download
+    gerar_xlsx_trilha, gerar_xlsx_trilha_novo_banco, atualizar_status_download
 )
 
 # Ao iniciar, tenta restaurar login
@@ -177,144 +177,92 @@ if st.session_state.get('show_login', False) and not st.session_state['autentica
 if pagina == "Impressão de Trilhas" and not st.session_state.get('show_login', False):
     st.write('### Gestão das Trilhas')
     
-    # Buscar trilhas do database_2.db (apenas trilhas principais)
-    conn2 = sqlite3.connect('database_2.db')
-    try:
-        df_trilhas_controle = pd.read_sql_query('SELECT Trilhas FROM controle_trilhas', conn2)
-    except Exception:
-        df_trilhas_controle = pd.DataFrame(columns=['Trilhas'])
-    conn2.close()
+    # Buscar trilhas do novo banco database_trilhas.db
+    db_trilhas_path = os.path.join("Impressão de trilhas", "database_trilhas.db")
     
-    # Buscar códigos das trilhas do login_status.db
-    conn_gestao = sqlite3.connect('login_status.db')
-    try:
-        df_gestao = pd.read_sql_query('SELECT Trilhas, Código FROM gestao_trilhas', conn_gestao)
-    except Exception:
-        df_gestao = pd.DataFrame(columns=['Trilhas', 'Código'])
-    conn_gestao.close()
-    
-    # Limpar duplicatas
-    df_trilhas_controle = df_trilhas_controle.drop_duplicates(subset=['Trilhas'])
-    df_gestao = df_gestao.drop_duplicates(subset=['Trilhas'])
-    
-    # Mesclar para obter os códigos das trilhas principais
-    df_trilhas_completas = pd.merge(df_trilhas_controle, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
-    
-    # Remover duplicatas da mesclagem
-    df_trilhas_completas = df_trilhas_completas.drop_duplicates(subset=['Trilhas'])
-    
-    # Criar combobox com as trilhas principais
-    if not df_trilhas_completas.empty:
-        opcoes_combo = []
-        for _, row in df_trilhas_completas.iterrows():
-            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] and row['Código'] != 'nan' else ''
-            trilha = row['Trilhas']
+    if os.path.exists(db_trilhas_path):
+        conn_trilhas = sqlite3.connect(db_trilhas_path)
+        try:
+            # Buscar trilhas únicas do novo banco
+            df_trilhas_novo = pd.read_sql_query('SELECT DISTINCT Trilhas FROM trilhas WHERE Trilhas IS NOT NULL AND Trilhas != ""', conn_trilhas)
             
-            # Se não tem código, tentar extrair do nome da trilha
-            if not codigo:
-                import re
-                padrao = r'^(CMR\s*\d+\.?\d*)'
-                match = re.search(padrao, str(trilha), re.IGNORECASE)
-                if match:
-                    codigo = match.group(1).strip()
-            
-            # Criar opção sem duplicação
-            if codigo:
-                opcao = f"{codigo} - {trilha}"
+            # Se não há trilhas no novo banco, mostrar mensagem
+            if df_trilhas_novo.empty:
+                st.info("📭 Nenhuma trilha encontrada no banco de dados.")
+                st.write("Faça upload de dados na página 'Banco de Dados' para começar.")
             else:
-                opcao = trilha
-            
-            opcoes_combo.append(opcao)
-        
-        # Remover duplicatas das opções
-        opcoes_combo = list(dict.fromkeys(opcoes_combo))
-        
-        # Combobox para seleção de trilha
-        trilha_selecionada = st.selectbox(
-            'Selecione uma trilha:',
-            options=[''] + opcoes_combo,
-            key='combo_trilhas'
-        )
-        
-        if trilha_selecionada:
-            # Botão Imprimir
-            if st.button('Imprimir', key='btn_imprimir'):
-                # Extrair código e nome da trilha
-                if ' - ' in trilha_selecionada:
-                    codigo_trilha, nome_trilha = trilha_selecionada.split(' - ', 1)
-                else:
-                    codigo_trilha = ''
-                    nome_trilha = trilha_selecionada
+                # Criar combobox com as trilhas do novo banco
+                opcoes_combo = []
+                for _, row in df_trilhas_novo.iterrows():
+                    trilha = row['Trilhas']
+                    
+                    # Tentar extrair código do nome da trilha
+                    import re
+                    padrao = r'^(CMR\s*\d+\.?\d*)'
+                    match = re.search(padrao, str(trilha), re.IGNORECASE)
+                    if match:
+                        codigo = match.group(1).strip()
+                        opcao = f"{codigo} - {trilha}"
+                    else:
+                        opcao = trilha
+                    
+                    opcoes_combo.append(opcao)
                 
-                # Gerar arquivo XLSX
-                xlsx_bytes = gerar_xlsx_trilha(nome_trilha, codigo_trilha)
+                # Remover duplicatas das opções
+                opcoes_combo = list(dict.fromkeys(opcoes_combo))
                 
-                # Atualizar status no database_2.db
-                if st.session_state['autenticado']:
-                    atualizar_status_download(nome_trilha, st.session_state['usuario'])
-                
-                # Botão de download
-                st.download_button(
-                    label='Download XLSX',
-                    data=xlsx_bytes,
-                    file_name=f'{codigo_trilha}_{nome_trilha}.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                # Combobox para seleção de trilha
+                trilha_selecionada = st.selectbox(
+                    'Selecione uma trilha:',
+                    options=[''] + opcoes_combo,
+                    key='combo_trilhas'
                 )
-    
-    # Exibir tabela completa com todos os dados (apenas trilhas principais)
-    if not df_trilhas_completas.empty:
-        # Buscar dados diretamente do database_2.db
-        conn2 = sqlite3.connect('database_2.db')
-        try:
-            df_ctrl = pd.read_sql_query('SELECT Trilhas, Status, "Modificado por", "Modificado em" FROM controle_trilhas', conn2)
-        except Exception:
-            df_ctrl = pd.DataFrame(columns=['Trilhas', 'Status', 'Modificado por', 'Modificado em'])
+                
+                if trilha_selecionada:
+                    # Botão Imprimir
+                    if st.button('Imprimir', key='btn_imprimir'):
+                        # Extrair código e nome da trilha
+                        if ' - ' in trilha_selecionada:
+                            codigo_trilha, nome_trilha = trilha_selecionada.split(' - ', 1)
+                        else:
+                            codigo_trilha = ''
+                            nome_trilha = trilha_selecionada
+                        
+                        # Gerar arquivo XLSX usando dados do novo banco
+                        xlsx_bytes = gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha)
+                        
+                        # Botão de download
+                        st.download_button(
+                            label='Download XLSX',
+                            data=xlsx_bytes,
+                            file_name=f'{codigo_trilha}_{nome_trilha}.xlsx',
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        )
+                
+                # Exibir tabela com dados do novo banco
+                st.write("### Dados das Trilhas")
+                
+                # Buscar todas as atividades do novo banco
+                df_atividades = pd.read_sql_query('''
+                    SELECT Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações 
+                    FROM trilhas 
+                    ORDER BY Trilhas, Atividades
+                ''', conn_trilhas)
+                
+                if not df_atividades.empty:
+                    st.dataframe(df_atividades, use_container_width=True)
+                else:
+                    st.info("📭 Nenhuma atividade encontrada no banco de dados.")
         
-        # Buscar dados da tabela controle_execucao para obter as categorias
-        try:
-            df_exec = pd.read_sql_query('SELECT trilha, categoria FROM controle_execucao', conn2)
-        except Exception:
-            df_exec = pd.DataFrame(columns=['trilha', 'categoria'])
+        except Exception as e:
+            st.error(f"❌ Erro ao acessar banco de dados: {e}")
+            st.info("Verifique se o banco de dados foi criado corretamente.")
         
-        conn2.close()
-        
-        # Remover duplicatas da tabela controle_trilhas
-        df_ctrl = df_ctrl.drop_duplicates(subset=['Trilhas'])
-        
-        # Mesclar para obter os códigos
-        df_final = pd.merge(df_ctrl, df_gestao, left_on='Trilhas', right_on='Trilhas', how='left')
-        
-        # Formatar coluna Trilha sem duplicação
-        def formatar_trilha(row):
-            codigo = row['Código'] if pd.notnull(row['Código']) and row['Código'] and row['Código'] != 'nan' else ''
-            trilha = row['Trilhas']
-            
-            # Se não tem código, tentar extrair do nome da trilha
-            if not codigo:
-                import re
-                padrao = r'^(CMR\s*\d+\.?\d*)'
-                match = re.search(padrao, str(trilha), re.IGNORECASE)
-                if match:
-                    codigo = match.group(1).strip()
-            
-            return f"{codigo} - {trilha}" if codigo else trilha
-        
-        df_final['Trilha'] = df_final.apply(formatar_trilha, axis=1)
-        
-        # Mesclar com os dados de categoria
-        df_final = pd.merge(df_final, df_exec, left_on='Trilhas', right_on='trilha', how='left')
-        
-        # Definir colunas para exibir
-        colunas_exibir = ['Trilha', 'Status', 'Modificado por', 'Modificado em', 'categoria']
-        colunas_existentes = [col for col in colunas_exibir if col in df_final.columns]
-        
-        # Renomear coluna categoria para Categoria
-        if 'categoria' in df_final.columns:
-            df_final = df_final.rename(columns={'categoria': 'Categoria'})
-            colunas_existentes = [col if col != 'categoria' else 'Categoria' for col in colunas_existentes]
-        
-        st.write('### Controle de Trilhas')
-        st.dataframe(df_final[colunas_existentes])
+        finally:
+            conn_trilhas.close()
+    else:
+        st.warning("⚠️ Banco de dados não encontrado!")
+        st.info("Execute o script 'criar_database_trilhas.py' para criar o banco de dados.")
 # Registre-se
 elif pagina == "Registre-se" and not st.session_state['autenticado']:
     tela_registre_se()
