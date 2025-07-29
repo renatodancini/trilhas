@@ -460,6 +460,7 @@ def sincronizar_database2():
 def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
     """
     Gera um arquivo XLSX para uma trilha específica usando dados do novo banco database_trilhas.db
+    Formato: Linha 1 = Nome da Trilha, Linha 2 = Vazia, Linha 3 = Cabeçalhos, Demais linhas = Dados
     """
     import pandas as pd
     import io
@@ -477,7 +478,7 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
     try:
         # Buscar todas as atividades da trilha específica
         df_atividades = pd.read_sql_query(
-            '''SELECT Trilhas, Atividades, Responsável, Tipo, Finalizado, Observações
+            '''SELECT Atividades, Responsável, Tipo, Finalizado, Observações
                FROM trilhas 
                WHERE Trilhas = ? 
                AND Atividades IS NOT NULL 
@@ -491,7 +492,6 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
             # Se não há atividades, criar template básico
             print(f"Nenhuma atividade encontrada para a trilha: {nome_trilha}")
             df_atividades = pd.DataFrame({
-                'Trilhas': [nome_trilha],
                 'Atividades': ['Atividade de exemplo'],
                 'Responsável': ['Responsável'],
                 'Tipo': ['Tipo'],
@@ -531,7 +531,7 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
         
     except Exception as e:
         print(f"Erro ao buscar atividades: {e}")
-        df_atividades = pd.DataFrame(columns=['Trilhas', 'Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações'])
+        df_atividades = pd.DataFrame(columns=['Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações'])
     finally:
         conn.close()
     
@@ -539,75 +539,64 @@ def gerar_xlsx_trilha_novo_banco(nome_trilha, codigo_trilha):
     buffer = io.BytesIO()
     
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        # Escrever dados das atividades
-        df_atividades.to_excel(writer, sheet_name='Atividades', index=False)
-        
-        # Obter workbook e worksheet para formatação
+        # Obter workbook e worksheet
         workbook = writer.book
-        worksheet = writer.sheets['Atividades']
+        
+        # Criar worksheet
+        worksheet = workbook.add_worksheet('Trilha')
         
         # Definir formatos
+        titulo_format = workbook.add_format({
+            'bold': True,
+            'font_size': 14,
+            'align': 'left',
+            'valign': 'top'
+        })
+        
         header_format = workbook.add_format({
             'bold': True,
             'text_wrap': True,
             'valign': 'top',
             'fg_color': '#D7E4BC',
-            'border': 1
+            'border': 1,
+            'align': 'center'
         })
         
         cell_format = workbook.add_format({
             'text_wrap': True,
             'valign': 'top',
-            'border': 1
+            'border': 1,
+            'align': 'left'
         })
         
-        # Aplicar formatação ao cabeçalho
-        for col_num, value in enumerate(df_atividades.columns.values):
-            worksheet.write(0, col_num, value, header_format)
+        # Escrever linha 1: Nome da Trilha
+        nome_completo_trilha = f"{codigo_trilha} - {nome_trilha}" if codigo_trilha else nome_trilha
+        worksheet.write(0, 0, nome_completo_trilha, titulo_format)
         
-        # Aplicar formatação às células de dados
-        for row_num in range(len(df_atividades)):
-            for col_num in range(len(df_atividades.columns)):
-                worksheet.write(row_num + 1, col_num, df_atividades.iloc[row_num, col_num], cell_format)
+        # Linha 2: Vazia (já está vazia por padrão)
+        
+        # Linha 3: Cabeçalhos das colunas
+        colunas = ['Atividades', 'Responsável', 'Tipo', 'Finalizado', 'Observações']
+        for col_num, coluna in enumerate(colunas):
+            worksheet.write(2, col_num, coluna, header_format)
+        
+        # Demais linhas: Dados das atividades
+        for row_num, (_, row) in enumerate(df_atividades.iterrows(), start=3):
+            for col_num, coluna in enumerate(colunas):
+                valor = row[coluna] if pd.notnull(row[coluna]) else ''
+                worksheet.write(row_num, col_num, valor, cell_format)
         
         # Ajustar largura das colunas
-        for i, col in enumerate(df_atividades.columns):
-            max_length = max(
-                df_atividades[col].astype(str).apply(len).max(),
-                len(col)
-            )
-            worksheet.set_column(i, i, min(max_length + 2, 50))
+        larguras_colunas = [50, 20, 15, 15, 30]  # Atividades, Responsável, Tipo, Finalizado, Observações
+        for i, largura in enumerate(larguras_colunas):
+            worksheet.set_column(i, i, largura)
         
-        # Adicionar informações da trilha
-        info_sheet = workbook.add_worksheet('Informações')
+        # Definir altura da linha do título
+        worksheet.set_row(0, 25)
         
-        info_data = [
-            ['Informações da Trilha'],
-            [''],
-            ['Nome da Trilha:', nome_trilha],
-            ['Código da Trilha:', codigo_trilha if codigo_trilha else 'N/A'],
-            ['Data de Geração:', datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')],
-            ['Total de Atividades:', len(df_atividades)],
-            [''],
-            ['Colunas do Arquivo:'],
-            ['• Trilhas: Nome da trilha'],
-            ['• Atividades: Descrição da atividade'],
-            ['• Responsável: Pessoa responsável'],
-            ['• Tipo: Tipo da atividade'],
-            ['• Finalizado: Status de conclusão'],
-            ['• Observações: Observações adicionais']
-        ]
-        
-        for row_num, row_data in enumerate(info_data):
-            for col_num, value in enumerate(row_data):
-                if row_num == 0:  # Título
-                    info_sheet.write(row_num, col_num, value, header_format)
-                else:
-                    info_sheet.write(row_num, col_num, value, cell_format)
-        
-        # Ajustar largura das colunas da aba de informações
-        info_sheet.set_column(0, 0, 20)
-        info_sheet.set_column(1, 1, 40)
+        # Definir altura das linhas de dados
+        for row_num in range(3, len(df_atividades) + 3):
+            worksheet.set_row(row_num, 20)
     
     buffer.seek(0)
     return buffer.read() 
