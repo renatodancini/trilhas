@@ -110,52 +110,18 @@ def fazer_backup_banco():
         return None, None
 
 def salvar_dados_banco(df):
-    """Salva dados do DataFrame no banco de dados"""
+    """Adiciona dados do DataFrame no banco de dados, sem apagar os antigos"""
     try:
         conn = sqlite3.connect(DB_TRILHAS_FILE)
-        
-        # Verificar quantos registros existem atualmente
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM trilhas")
-        registros_atuais = cursor.fetchone()[0]
-        
-        # Fazer backup se existem dados
-        backup_data = None
-        backup_filename = None
-        if registros_atuais > 0:
-            backup_data, backup_filename = fazer_backup_banco()
-        
-        # Limpar dados existentes
-        conn.execute("DELETE FROM trilhas")
-        
-        # Inserir novos dados
+        # Não apaga mais os dados antigos!
+        # Apenas adiciona os novos registros
         df.to_sql('trilhas', conn, if_exists='append', index=False)
-        
         conn.commit()
         conn.close()
-        
-        # Mensagem detalhada sobre a operação
-        if registros_atuais > 0:
-            st.success(f"✅ Banco de dados atualizado com sucesso!")
-            st.info(f"📊 {registros_atuais} registros antigos foram removidos")
-            st.success(f"📈 {len(df)} novos registros foram inseridos")
-            
-            # Oferecer download do backup
-            if backup_data and backup_filename:
-                st.warning("💾 Backup dos dados antigos disponível:")
-                st.download_button(
-                    label=f"📥 Download Backup: {backup_filename}",
-                    data=backup_data,
-                    file_name=backup_filename,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-        else:
-            st.success(f"✅ Dados salvos com sucesso! {len(df)} registros inseridos.")
-        
+        st.success(f"✅ {len(df)} novos registros foram inseridos no banco!")
         return True
-    
     except Exception as e:
-        st.error(f"❌ Erro ao salvar dados no banco: {e}")
+        st.error(f"Erro ao salvar dados: {e}")
         return False
 
 def buscar_dados_banco():
